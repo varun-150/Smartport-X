@@ -1,0 +1,458 @@
+# =============================================================================
+# SmartPortX — Docker Compose (Local Development & Demo)   [M1.2]
+# Matches DEPLOYMENT-ARCHITECTURE §3.1 with one intentional deviation:
+#   ADR-004 / DATA-ARCHITECTURE §2 == schema-per-service on a SINGLE database
+#   `smartportx` (7 logical schemas), so app services connect to the shared DB
+#   and name their schema via SERVICE_SCHEMA instead of per-service DATABASE_URL.
+# (Deviation recorded: .smartport/PHASE-4-DECISIONS.md D-424)
+#
+# NOTE: app services build from ./smartportx-*/Dockerfile — those Dockerfiles land
+# in the per-service milestones (M4..M12); infra (postgres/rabbitmq/monitoring) is
+# usable immediately.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure Services
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    image: postgres:17.11
+    container_name: smartportx-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
+    environment:
+      POSTGRES_DB: smartportx
+      POSTGRES_USER: smartportx
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-smartportx_local}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartportx -d smartportx"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smartportx-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: smartportx-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - smartportx-network
+
+  eureka:
+    build:
+      context: ./smartportx-eureka
+      dockerfile: Dockerfile
+    container_name: smartportx-eureka
+    ports:
+      - "8761:8761"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8761
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - smartportx-network
+
+  # ---------------------------------------------------------------------------
+  # Application Services
+  # ---------------------------------------------------------------------------
+
+  gateway:
+    build:
+      context: ./smartportx-gateway
+      dockerfile: Dockerfile
+    container_name: smartportx-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8080
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400}
+    depends_on:
+      eureka:
+        condition: service_healthy
+      identity:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - smartportx-network
+
+  identity:
+    build:
+      context: ./smartportx-identity
+      dockerfile: Dockerfile
+    container_name: smartportx-identity
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8081
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      SERVICE_SCHEMA: smartportx_identity
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
+      DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  yard:
+    build:
+      context: ./smartportx-yard
+      dockerfile: Dockerfile
+    container_name: smartportx-yard
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8082
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      SERVICE_SCHEMA: smartportx_yard
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
+      DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      container:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  gate:
+    build:
+      context: ./smartportx-gate
+      dockerfile: Dockerfile
+    container_name: smartportx-gate
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8083
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      SERVICE_SCHEMA: smartportx_gate
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
+      DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      container:
+        condition: service_healthy
+      yard:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  container:
+    build:
+      context: ./smartportx-container
+      dockerfile: Dockerfile
+    container_name: smartportx-container
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8084
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      SERVICE_SCHEMA: smartportx_container
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
+      DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  vessel:
+    build:
+      context: ./smartportx-vessel
+      dockerfile: Dockerfile
+    container_name: smartportx-vessel
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8085
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      SERVICE_SCHEMA: smartportx_vessel
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
+      DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      container:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  integration:
+    build:
+      context: ./smartportx-integration
+      dockerfile: Dockerfile
+    container_name: smartportx-integration
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8086
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      SERVICE_SCHEMA: smartportx_integration
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
+      DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+      IOT_MODE: simulation
+      CUSTOMS_CLEARANCE_RATE: 0.7
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  notification:
+    build:
+      context: ./smartportx-notification
+      dockerfile: Dockerfile
+    container_name: smartportx-notification
+    ports:
+      - "8087:8087"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8087
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      SERVICE_SCHEMA: smartportx_notification
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
+      DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8087/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  # ---------------------------------------------------------------------------
+  # Frontend
+  # ---------------------------------------------------------------------------
+
+  dashboard:
+    build:
+      context: ./smartportx-dashboard
+      dockerfile: Dockerfile
+    container_name: smartportx-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - smartportx-network
+
+  # ---------------------------------------------------------------------------
+  # Monitoring & Observability
+  # ---------------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: smartportx-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - smartportx-network
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: smartportx-grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    depends_on:
+      - prometheus
+    networks:
+      - smartportx-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.59
+    container_name: smartportx-jaeger
+    ports:
+      - "16686:16686"
+      - "6831:6831/udp"
+      - "14268:14268"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - smartportx-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  smartportx-network:
+    driver: bridge
+    name: smartportx-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres-data:
+    name: smartportx-postgres-data
+  rabbitmq-data:
+    name: smartportx-rabbitmq-data
+  prometheus-data:
+    name: smartportx-prometheus-data
+  grafana-data:
+    name: smartportx-grafana-data

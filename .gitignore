@@ -1,0 +1,39 @@
+# Java / Maven
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+*.log
+
+# Node / dashboard
+node_modules/
+dist/
+coverage/
+.vite/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+.factorypath
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Secrets & local env — NEVER commit real credentials
+.env
+*.env.local
+application-local.yml
+*.pem
+*.jks
+*.p12
+!keystore/dev/placeholder.txt
+
+# Test/run artifacts
+hs_err_pid*
+replay_pid*
+*.hprof

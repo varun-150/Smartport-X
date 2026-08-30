@@ -65,7 +65,7 @@ SmartPortX is a Service-Oriented Architecture (SOA) container port logistics pla
 | API Gateway | smartportx-gateway | 8080 | — | Central entry point, routing, auth |
 | Identity | smartportx-identity | 8081 | /api/v1/auth/*, /api/v1/users/*, /api/v1/roles/* | Authentication, authorization, user management |
 | Yard | smartportx-yard | 8082 | /api/v1/yard/* | Yard layout, stacking, optimization |
-| Container | smartportx-container | 8083 | /api/v1/containers/* | Container registry, lifecycle, history |
+| Container | smartportx-container | 8084 | /api/v1/containers/* | Container registry, lifecycle, history |
 | Gate | smartportx-gate | 8084 | /api/v1/appointments/*, /api/v1/gate/* | Appointments, gate-in/out processing |
 | Vessel | smartportx-vessel | 8085 | /api/v1/vessels/* | Vessel registry, schedules, discharge ops |
 | Integration | smartportx-integration | 8086 | /api/v1/integration/* | EDIFACT, IoT, customs integration |
@@ -112,7 +112,7 @@ Each microservice is reachable directly for internal traffic (service mesh / int
 |---------|-----------------|
 | Identity | `http://smartportx-identity:8081/api/v1/` |
 | Yard | `http://smartportx-yard:8082/api/v1/` |
-| Container | `http://smartportx-container:8083/api/v1/` |
+| Container | `http://smartportx-container:8084/api/v1/` |
 | Gate | `http://smartportx-gate:8084/api/v1/` |
 | Vessel | `http://smartportx-vessel:8085/api/v1/` |
 | Integration | `http://smartportx-integration:8086/api/v1/` |
@@ -1431,10 +1431,10 @@ Register a new container in the system.
   "tareWeight": 3900.00,
   "maxPayload": 26580.00,
   "sealNumber": "SL12345678",
-  " dangerousGoods": null,
-  " BillOfLading": "MSKU202608001",
-  " originPort": "CNSHA",
-  " destinationPort": "SGSIN",
+  "dangerousGoods": null,
+  "billOfLading": "MSKU202608001",
+  "originPort": "CNSHA",
+  "destinationPort": "SGSIN",
   " expectedArrival": "2026-08-28T06:00:00Z"
 }
 ```
@@ -1443,8 +1443,8 @@ Register a new container in the system.
 |-------|------|----------|------------|
 | `containerNumber` | string | yes | Pattern: `[A-Z]{4}[0-9]{7}`, unique |
 | `containerType` | enum | yes | `20DC`, `40DC`, `40HC`, `45HC`, `20RF`, `40RF`, `20TK`, `40TK` |
-| `owner` | string | yes | 1–200 characters |
-| `consignee` | string | no | 1–200 characters |
+| `owner` | string | yes | 1–100 characters |
+| `consignee` | string | no | 1–100 characters |
 | `weight` | decimal | yes | > 0, in kilograms |
 | `tareWeight` | decimal | no | > 0, in kilograms |
 | `maxPayload` | decimal | no | > 0, in kilograms |
@@ -1495,7 +1495,7 @@ Register a new container in the system.
   "originPort": "CNSHA",
   "destinationPort": "SGSIN",
   "expectedArrival": "2026-08-28T06:00:00Z",
-  "status": "EXPECTED",
+  "status": "REGISTERED",
   "currentLocation": null,
   "createdAt": "2026-08-26T10:30:00Z",
   "updatedAt": "2026-08-26T10:30:00Z"
@@ -1521,7 +1521,7 @@ List containers with pagination, sorting, and filtering.
 |-----------|------|---------|-------------|
 | `cursor` | string | — | Pagination cursor |
 | `limit` | integer | 25 | Page size (1–100) |
-| `sort` | string | `createdAt,desc` | Sort field and direction |
+| `sort` | string | `createdAt,desc` | Sort field and direction (`createdAt`, `asc`/`desc` only — unsupported → 400 `invalid_query`, D-437) |
 | `filter[status]` | enum | — | Filter by status |
 | `filter[type]` | enum | — | Filter by container type |
 | `filter[owner]` | string | — | Filter by owner (partial match) |
@@ -1639,7 +1639,7 @@ Advanced container search with complex criteria.
 ```json
 {
   "containerNumber": "MSKU12*",
-  "status": ["IN_YARD", "POSITIONED"],
+  "status": ["IN_YARD", "LOADED"],
   "type": ["40HC", "40DC"],
   "owner": "MSC",
   "location": {
@@ -1652,7 +1652,6 @@ Advanced container search with complex criteria.
     "max": 30000
   },
   "dangerousGoods": false,
-  "customsStatus": "CLEARED",
   "sort": "weight,desc",
   "limit": 50
 }
@@ -1667,7 +1666,7 @@ Advanced container search with complex criteria.
 | `location` | object | Location-based filter |
 | `weight` | object | Weight range filter |
 | `dangerousGoods` | boolean | Filter by dangerous goods flag |
-| `customsStatus` | string | Filter by customs clearance status |
+| `customsStatus` | string | NOT SUPPORTED — rejected with 400 `invalid_query` (D-437; container does not own customs data) |
 
 **Success Response — 200 OK:** Returns paginated container list matching criteria.
 
@@ -1679,52 +1678,54 @@ Advanced container search with complex criteria.
 
 Transition a container through its lifecycle states.
 
-**Container Status State Machine:**
+**Container Status State Machine** (DATA-ARCHITECTURE §7.1 enums; all 15 transitions enforced by `ContainerStateMachine`, D-434; a transition to the current status → 422 `invalid_status_transition`):
 
 ```
-EXPECTED → RECEIVED → IN_YARD → POSITIONED → READY_FOR_PICKUP → LOADED → RELEASED → GATE_OUT
-    ↓                                        ↑
-    └────────────────────────────────────────┘
+REGISTERED → AT_GATE → IN_YARD → LOADED → DISCHARGED → AT_GATE_OUT → DEPARTED
+   │           │          │                          │
+   └───┬───────┴──────────┴──────────────────────────┘
+       ▼
+      HELD ──→ AT_GATE | IN_YARD | DISCHARGED | AT_GATE_OUT      (DEPARTED is terminal)
 ```
 
 | Status | Description |
 |--------|-------------|
-| `EXPECTED` | Container registered but not yet arrived |
-| `RECEIVED` | Container received at gate |
-| `IN_YARD` | Container in yard, not yet positioned |
-| `POSITIONED` | Container placed in specific yard slot |
-| `READY_FOR_PICKUP` | Container released for truck pickup |
+| `REGISTERED` | Container entered the system but not yet at port |
+| `AT_GATE` | Container at gate check-in |
+| `IN_YARD` | Container stored in yard |
 | `LOADED` | Container loaded onto vessel |
-| `RELEASED` | Customs released |
-| `GATE_OUT` | Container has left terminal |
+| `DISCHARGED` | Container discharged from vessel |
+| `AT_GATE_OUT` | Container at gate for exit |
+| `DEPARTED` | Container has left the port |
+| `HELD` | Container on customs hold |
 
 **Request Body:**
 
 ```json
 {
-  "status": "POSITIONED",
-  "reason": "Container placed in B01-B03-R02-T03 per stacking plan",
-  "location": "B01-B03-R02-T03",
+  "status": "AT_GATE",
+  "reason": "Truck driver presented container at Gate 3",
+  "location": "GATE-03",
   "operator": "jdoe"
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `status` | enum | yes | Target status |
+| `status` | enum | yes | Target status (must differ from current; same-status → 422) |
 | `reason` | string | no | Human-readable reason |
-| `location` | string | no | New position (required for POSITIONED status) |
-| `operator` | string | no | Operator username |
+| `location` | string | no | Optional; if non-blank, updates `currentLocation` (D-437) |
+| `operator` | string | no | Ignored — performedBy/changedBy taken from JWT subject |
 
 **Success Response — 200 OK:**
 
 ```json
 {
   "containerId": "550e8400-e29b-41d4-a716-446655440000",
-  "previousStatus": "IN_YARD",
-  "newStatus": "POSITIONED",
+  "previousStatus": "REGISTERED",
+  "newStatus": "AT_GATE",
   "transitionTime": "2026-08-26T10:30:00Z",
-  "location": "B01-B03-R02-T03"
+  "location": "GATE-03"
 }
 ```
 
@@ -1733,8 +1734,8 @@ EXPECTED → RECEIVED → IN_YARD → POSITIONED → READY_FOR_PICKUP → LOADED
 | Status | Condition |
 |--------|-----------|
 | 404 | Container not found |
-| 422 | Invalid status transition (e.g., `LOADED` → `EXPECTED`) |
-| 422 | Location required for POSITIONED status |
+| 422 | Invalid status transition (e.g., `LOADED` → `REGISTERED`) |
+| 422 | Transition to current status (must differ) |
 
 ---
 
@@ -1768,31 +1769,32 @@ Get movement history for a container.
       "to": "GATE-03",
       "timestamp": "2026-08-24T14:30:00Z",
       "operator": "gate-op-01",
-      "truckLicensePlate": "B123ABC",
-      "appointmentId": "apt-001"
+      "reason": null,
+      "createdAt": "2026-08-24T14:30:00Z"
     },
     {
       "movementId": "mv-002",
       "containerId": "550e8400-e29b-41d4-a716-446655440000",
       "containerNumber": "MSKU1234567",
-      "movementType": "YARD_PLACEMENT",
+      "movementType": "YARD_MOVE",
       "from": "GATE-03",
       "to": "B01-B03-R02-T03",
       "timestamp": "2026-08-24T15:00:00Z",
       "operator": "yard-crane-01",
-      "equipmentId": "YC-003"
+      "reason": "Stack optimization",
+      "createdAt": "2026-08-24T15:00:00Z"
     },
     {
       "movementId": "mv-003",
       "containerId": "550e8400-e29b-41d4-a716-446655440000",
       "containerNumber": "MSKU1234567",
-      "movementType": "RESHUFFLE",
-      "from": "B01-B03-R02-T03",
+      "movementType": "VESSEL_DISCHARGE",
+      "from": "CY-01",
       "to": "B01-B03-R01-T04",
       "timestamp": "2026-08-25T09:15:00Z",
       "operator": "yard-crane-02",
-      "equipmentId": "YC-001",
-      "reason": "Stack optimization — departure clustering"
+      "reason": null,
+      "createdAt": "2026-08-25T09:15:00Z"
     }
   ],
   "pagination": {
@@ -1810,12 +1812,9 @@ Get movement history for a container.
 |------|-------------|
 | `GATE_IN` | Container entered terminal via gate |
 | `GATE_OUT` | Container exited terminal via gate |
+| `YARD_MOVE` | Container repositioned within yard |
+| `VESSEL_LOAD` | Container loaded onto vessel |
 | `VESSEL_DISCHARGE` | Container discharged from vessel |
-| `VESSEL_LOADING` | Container loaded onto vessel |
-| `YARD_PLACEMENT` | Container placed in yard position |
-| `RESHUFFLE` | Container moved within yard (stack optimization) |
-| `POSITION_CHANGE` | Container repositioned in yard |
-| `TRANSSHIPMENT` | Container transferred between vessels |
 
 ---
 
@@ -1838,43 +1837,51 @@ Get all events (including status changes, IoT, customs) for a container.
   "data": [
     {
       "eventId": "evt-001",
+      "eventType": "REGISTERED",
+      "containerId": "550e8400-e29b-41d4-a716-446655440000",
+      "containerNumber": "MSKU1234567",
+      "timestamp": "2026-08-23T09:00:00Z",
+      "data": {
+        "containerId": "550e8400-e29b-41d4-a716-446655440000",
+        "containerNumber": "MSKU1234567",
+        "containerType": "40HC",
+        "status": "REGISTERED",
+        "createdAt": "2026-08-23T09:00:00Z"
+      },
+      "source": null
+    },
+    {
+      "eventId": "evt-002",
       "eventType": "STATUS_CHANGE",
       "containerId": "550e8400-e29b-41d4-a716-446655440000",
       "containerNumber": "MSKU1234567",
       "timestamp": "2026-08-24T14:30:00Z",
       "data": {
-        "previousStatus": "EXPECTED",
-        "newStatus": "RECEIVED"
+        "containerId": "550e8400-e29b-41d4-a716-446655440000",
+        "containerNumber": "MSKU1234567",
+        "previousStatus": "REGISTERED",
+        "newStatus": "AT_GATE",
+        "location": "GATE-03",
+        "changedAt": "2026-08-24T14:30:00Z"
       },
-      "source": "smartportx-gate",
-      "operator": "gate-op-01"
-    },
-    {
-      "eventId": "evt-002",
-      "eventType": "CUSTOMS_UPDATE",
-      "containerId": "550e8400-e29b-41d4-a716-446655440000",
-      "containerNumber": "MSKU1234567",
-      "timestamp": "2026-08-25T08:00:00Z",
-      "data": {
-        "status": "CLEARED",
-        "reason": "Documentation verified",
-        "clearedBy": "customs-officer-01"
-      },
-      "source": "smartportx-integration"
+      "source": null
     },
     {
       "eventId": "evt-003",
-      "eventType": "IOT_READING",
+      "eventType": "MOVEMENT",
       "containerId": "550e8400-e29b-41d4-a716-446655440000",
       "containerNumber": "MSKU1234567",
-      "timestamp": "2026-08-26T10:00:00Z",
+      "timestamp": "2026-08-24T14:31:00Z",
       "data": {
-        "sensorType": "TEMPERATURE",
-        "value": "4.2",
-        "unit": "°C",
-        "batteryLevel": 72
+        "movementId": "550e8400-e29b-41d4-a716-446655440001",
+        "containerId": "550e8400-e29b-41d4-a716-446655440000",
+        "containerNumber": "MSKU1234567",
+        "movementType": "GATE_IN",
+        "to": "GATE-03",
+        "timestamp": "2026-08-24T14:31:00Z",
+        "performedBy": "gate-op-01"
       },
-      "source": "smartportx-integration"
+      "source": null
     }
   ],
   "pagination": {
@@ -1888,15 +1895,16 @@ Get all events (including status changes, IoT, customs) for a container.
 
 **Event Types:**
 
+> `smartportx-container` emits only the four tokens below (D-436). Note: `source` is not persisted in the
+> container event log (D-440) — consumers needing origin attribution should read the envelope `source` on the
+> RabbitMQ message instead.
+
 | Type | Description |
 |------|-------------|
-| `STATUS_CHANGE` | Container lifecycle status change |
+| `REGISTERED` | Container registered in the system |
+| `STATUS_CHANGE` | Container lifecycle state transition |
 | `MOVEMENT` | Physical movement recorded |
-| `CUSTOMS_UPDATE` | Customs status change |
-| `IOT_READING` | IoT sensor data received |
-| `DOCUMENT_UPLOADED` | Document attached to container |
-| `ALERT` | System-generated alert (e.g., reefer temp deviation) |
-| `MANUAL_NOTE` | Operator-added note |
+| `REMOVED` | Container removed (soft delete) |
 
 ---
 

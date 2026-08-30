@@ -6,6 +6,28 @@ spring:
     name: identity
   jackson:
     default-property-inclusion: non_null
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/smartportx?currentSchema=smartportx_identity}
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+smartportx:
+  security:
+    jwt:
+      issuer: smartportx-identity
+      access-token-ttl: ${ACCESS_TOKEN_TTL:PT15M}
+      refresh-token-ttl: ${REFRESH_TOKEN_TTL:P7D}
+      key-size: ${JWT_KEY_SIZE:2048}
+    bcrypt-strength: ${BCRYPT_STRENGTH:12}
+    login-rate-limit: ${LOGIN_RATE_LIMIT:5}
+    seed-demo-users: ${SEED_DEMO_USERS:false}
 
 eureka:
   client:

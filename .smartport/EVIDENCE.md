@@ -226,3 +226,79 @@ Each entry:
   and D-428 (filter/advice only in servlet services; reactive gateway excluded) recorded
 - **Evidence:** SmartPortxCommonAutoConfiguration + imports file; 5 main packages; 4 test classes; root reactor
   mvn clean verify still 11/11 + identity context test green
+
+
+## E-024: M3 — smartportx-identity vertical slice (auth, profiles, admin management)
+- **Requirement:** M3 per plan — authentication/registration (FR-001), user profiles/roles (FR-002),
+  admin user management core (FR-015, M3 part), with contracts API-CONTRACTS §3.1/§3.2 and ADR-009.
+- **Implementation:** com.smartportx.identity full slice —
+  domain (User, Role, UserRole, RefreshTokenEntity, PasswordHistory, enums), repositories (users, roles,
+  user_roles, refresh_tokens, password_history), services (AuthService, UserService, UserQueryService with
+  cursor/keyset pagination, RefreshTokenService with rotation + reuse-detection via unique token_hash,
+  PasswordService BCrypt + last-5 history, AccountSecurity), security (JwtTokenService + KeyRepository
+  in-JVM signing keys, TokenHasher SHA-256, LoginRateLimiter, JsonProblemHandler, RolePermissions),
+  config (SecurityConfig method security, SecurityProperties), web (AuthController, UserAdminController,
+  IdentityExceptionAdvice), DemoDataSeeder; Flyway V1 identity superset DDL (D-431). Decisions D-429
+  (canonical 5-role RBAC = API-CONTRACTS), D-430 (single-role authoritative + mirror), D-431 (superset DDL),
+  D-432 (cursor pagination per contract), D-433 (PUT /auth/password extension).
+- **Test:** mvn -pl smartportx-identity -am test — 15/15 PASS (ContextSmoke, AuthFlow, LoginSecurity,
+  RateLimit, AdminUserManagement integration suites): JWT issue/refresh rotation, reuse detection, logout,
+  password policy + history, RBAC @PreAuthorize, login rate-limit 429 `rate_limited`, admin CRUD + role/status
+  change, cursor pagination envelope; reactor mvn clean verify green across all 10 modules.
+- **Result:** PASS (M3.7 contract conformance seperate entry E-025)
+- **Review:** Lead/Orchestrator + Implementer; decisions D-429…D-433 recorded (PHASE-4-DECISIONS.md);
+  findings F-412/F-413 and fixes SC-07…SC-10 logged (PHASE-4-FINDINGS.md / PHASE-4-FIXES.md).
+- **Evidence:** 4 main packages × 49 files under smartportx-identity; V1__init.sql; 5 integration test classes;
+  mvn output above (23 tests total incl. E-025 conformance, green).
+
+## E-025: M3.7 — contract conformance reconciliation + CI Postgres provisioning
+- **Requirement:** M3.7 per plan — API-CONTRACTS conformance check on identity responses/params; CI must run the
+  integration suites (GitHub Actions runner has no database by default).
+- **Implementation:** (1) `GET /users` now binds the contract's query names `filter[role]`, `filter[status]`,
+  `filter[search]` and `sort` (`createdAt,asc|desc`, default `createdAt,desc`); `UserQueryService` keyset
+  predicates for both directions; unsupported sort → 400 `invalid_query` via new InvalidQueryException +
+  IdentityExceptionAdvice handler (RFC 9457 ProblemDetail). (2) New 8-test conformance suite
+  ContractConformanceIntegrationTest locks login/refresh/logout response shapes (§3.1), users envelope +
+  pagination (§3.2/§2.4), filter param names, default sort direction, asc sort, and invalid-sort 400.
+  (3) ci.yml backend job now provisions `postgres:17` service (postgres/postgres, port 5432, pg_isready
+  health) and runs `scripts/init-databases.sh` (installs postgresql-client, PGHOST/PGPASSWORD/init script;
+  script already proven idempotent in E-022).
+- **Test:** mvn -B -ntp -pl smartportx-identity -am clean test — ContractConformanceIntegrationTest 8/8 PASS;
+  full suite 23/23 PASS (identity) + 17/17 PASS (common reactored in), BUILD SUCCESS; log saved.
+- **Result:** PASS (identity contract conformance verified); CI green run on GitHub Actions PENDING (local
+  machine cannot execute Actions; workflow + script verified statically).
+- **Review:** Lead/Orchestrator + Implementer; findings F-412 (CI DB gap) / F-413 (param+sort drift) and
+  fixes SC-07/08/09 CLOSED, SC-10 OPEN recorded.
+- **Evidence:** ContractConformanceIntegrationTest.java (8 tests); UserAdminController filter/sort binding;
+  UserQueryService CursorDirection ASC/DESC; InvalidQueryException + advice; ci.yml services/init step;
+  scripts/init-databases.sh; mvn output (Tests run: 23 … BUILD SUCCESS).
+
+## E-026: M4.8 — container registry, state machine, movements, events, RBAC (FR-003/FR-004)
+- **Requirement:** M4 per plan — container registry + lifecycle endpoints (FR-003) and state machine +
+  movements + status history + event log (FR-004), API-CONTRACTS §5 + decisions D-434…D-437.
+- **Implementation:** domain (Container, ContainerType, ContainerStatus, MovementType, ContainerNumbers,
+  ContainerStateMachine with exactly the 15 recorded transitions); repositories with keyset cursor paging,
+  soft-delete filtering (`removed_at`), case-insensitive search specs; services (ContainerService,
+  ContainerQueryService, ContainerEventLogger); events (EventTransport interface, LogEventTransport default,
+  RabbitEventTransport behind `smartportx.events.publish-to-rabbitmq`, ContainerEventsConfig mutually-exclusive
+  beans, ContainerDomainEvents envelope vocabulary, JsonNode payloads per D-438); web (ContainerController +
+  18 DTOs incl. flattened dangerous-goods declaration with `dangerousGoods` flag); security (JWKS JwtDecoder,
+  stateless chain, JsonProblemHandler, ContainerExceptionAdvice mapping AuthorizationDeniedException → 403
+  `access_denied`, role guard `ADMIN|TERMINAL_OP` on writes); Flyway V1 superset DDL in
+  `smartportx_container` schema. Decisions D-438/D-439/D-440 recorded.
+- **Test:** `mvn -B -ntp -pl smartportx-container -am clean test` — **50/50 PASS** (14 unit: ContainerNumbers
+  10 + ContainerStateMachine 4; 36 integration: register 9, query 11, status 7, movement 5, events 4).
+  Integration suites verify ISO 6346 check-digit rejection, duplicate 409, soft-delete replay, cursor pagination,
+  `sort`/`customsStatus` 400 `invalid_query`, all legal transitions + same-status 422, JWT-authoritative
+  performedBy, and Rabbit envelope capture (`container.ContainerRegistered|ContainerStatusChanged|
+  ContainerMoved|ContainerRemoved`) via `@MockitoBean EventTransport`. Full reactor `mvn -B clean verify`
+  **11/11 BUILD SUCCESS** (mirrors CI backend job).
+- **Result:** PASS (FR-003, FR-004 delivered; SC-11/SC-12/SC-13 closed; findings F-414…F-418 + E-025 carried
+  over). CI green run on GitHub Actions PENDING (SC-10 — local machine cannot execute Actions).
+- **Review:** Lead/Orchestrator + Implementer; decisions D-438…D-440 recorded; doc-fix sweep applied to
+  API-CONTRACTS §5 (ports, §5.1 sample + lengths, §5.2 state machine, §5.3 movement/event vocabulary) and
+  DATA-ARCHITECTURE §7.1 (8 container types).
+- **Evidence:** 10 packages × 45 main files + 5 integration suites (11 test files incl. infra) under
+  smartportx-container; V1__init.sql;
+  LogEventTransport emitted domain events with correlationId in MDC during the runs; mvn output
+  (Tests run: 50 … BUILD SUCCESS; reactor BUILD SUCCESS).

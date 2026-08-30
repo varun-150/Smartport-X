@@ -6,18 +6,19 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * M2 verification: proves the smartportx-common auto-configuration activates inside a
- * servlet service (identity) — correlation filter injectable, RFC 9457 handler registered,
- * shared metrics/health present. Prevents "dependency present but inert" drift.
+ * M2 verification preserved through M3: proves the smartportx-common auto-configuration
+ * still activates inside the identity context (correlation filter, RFC 9457 handler,
+ * shared metrics/health) once JPA, Flyway and security are wired in.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
-        "eureka.client.enabled=false",
-        "spring.main.allow-bean-definition-overriding=true"
+        "eureka.client.enabled=false"
 })
+@ActiveProfiles("test")
 class ContextSmokeTest {
 
     @Autowired

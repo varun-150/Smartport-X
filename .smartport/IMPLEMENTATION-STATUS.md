@@ -33,7 +33,7 @@
 | .env.example (no secrets) | DEPLOYMENT-ARCHITECTURE §5.2 | VERIFIED | E-022 |
 | Prometheus / Grafana / Jaeger | OBSERVABILITY-ARCHITECTURE | SCAFFOLDED (configs written; runs on compose) | E-022 |
 | Flyway migrations (per service V1) | DATA-ARCHITECTURE all schemas | SCAFFOLDED (V1 skeletons; real DDL per service milestone) | E-022 |
-| GitHub Actions CI | DEPLOYMENT-ARCHITECTURE §6 | SCAFFOLDED (ci.yml; docker/scan stages `if: false` until M12) | E-021 |
+| GitHub Actions CI | DEPLOYMENT-ARCHITECTURE §6 | UPDATED (backend job provisions postgres:17 service + init-databases.sh so integration tests can run; docker/scan stages `if: false` until M12; green GitHub run still PENDING — not executable locally) | E-021/E-025 |
 | Seed data generator (D-010) | INTEGRATION-ARCHITECTURE §7, D-010 | NOT STARTED | — |
 
 ## 3. FUNCTIONAL REQUIREMENTS TRACE (46 FR — slice mapping)
@@ -44,10 +44,10 @@
 
 | FR group (REQUIREMENTS.md) | Milestone | Status | Evidence |
 |----------------------------|-----------|--------|----------|
-| FR-001 authentication/registration | M3 | NOT STARTED | — |
-| FR-002 user profiles/roles | M3 | NOT STARTED | — |
-| FR-003 container registry + tracking | M4 | NOT STARTED | — |
-| FR-004 container state machine | M4 | NOT STARTED | — |
+| FR-001 authentication/registration | M3 | VERIFIED | E-024/E-025 |
+| FR-002 user profiles/roles | M3 | VERIFIED | E-024/E-025 |
+| FR-003 container registry + tracking | M4 | VERIFIED | E-026 |
+| FR-004 container state machine | M4 | VERIFIED | E-026 |
 | FR-005 appointment booking + quotas | M6 | NOT STARTED | — |
 | FR-006 real-time role-based dashboards | M9+M11 | NOT STARTED | — |
 | FR-007 gate check-in/check-out | M6 | NOT STARTED | — |
@@ -58,7 +58,7 @@
 | FR-012 IoT sim | M8 | NOT STARTED | — |
 | FR-013 customs sim + gate-out check | M8 | NOT STARTED | — |
 | FR-014 notifications/alerts | M9 | NOT STARTED | — |
-| FR-015 admin user management | M3+M11 | NOT STARTED | — |
+| FR-015 admin user management | M3+M11 | PARTIAL (M3 API VERIFIED; admin dashboard part in M11) | E-024/E-025 |
 | FR-016..FR-046 remaining (see REQUIREMENTS.md) | per milestone | NOT STARTED | — |
 
 ## 4. NON-FUNCTIONAL REQUIREMENTS (16 groups)
@@ -82,8 +82,8 @@ Security status rolled per service `XSecurityTest` (TEST-STRATEGY §7). Full map
 | M0 Repository Foundation | 2026-08-27 | Parent POM + 10 scaffolds + dashboard + CI; backend 11/11 BUILD SUCCESS; dashboard lint/test/build green | E-021 | — (M0.6 git commit pending user auth) |
 | M1 Infrastructure | 2026-08-27 | init-databases idempotent (7 schemas live, E-022); compose parse-clean; rabbit-topology 6 exc/24 queues (live verify at M4.7); .env.example; Flyway skeletons; monitoring configs | E-022 | — |
 | M2 common | 2026-08-27 | RFC 9457 error model + no-leak 500, correlation filter, pagination/sort, DomainEvent, metrics/health/tracing, auto-config starter (17 tests + identity context smoke green) | E-023 | — |
-| M3 identity | — | — | — | — |
-| M4 container | — | — | — | — |
+| M3 identity | 2026-08-30 | Auth + profiles + admin mgmt slice live: JWT + refresh rotation (ADR-009), 5-role RBAC (D-429/D-430), password history, cursor paging, rate limit; 15 core + 8 contract-conformance tests = 23/23 (identity) + 17/17 (common), BUILD SUCCESS | E-024/E-025 | — |
+| M4 container | 2026-08-30 | Registry + lifecycle slice live: CRUD (ISO 6346 + DL check digit), 15-edge state machine (D-434), movements + status history, event log REGISTERED/STATUS_CHANGE/MOVEMENT/REMOVED + Rabbit/Log transports (D-438), RBAC writes, cursor paging; 14 unit + 36 integration = 50/50; reactor 11/11 BUILD SUCCESS; SC-11/12/13 closed; API-CONTRACTS §5 + DATA-ARCHITECTURE §7.1 doc-fix sweep applied | E-026 | — |
 | M5 yard | — | — | — | — |
 | M6 gate | — | — | — | — |
 | M7 vessel | — | — | — | — |

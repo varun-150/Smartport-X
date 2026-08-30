@@ -174,7 +174,7 @@ Increments (TDD):
 - M4.1 Flyway V1: containers, container_movements, container_events, container_status_history (§7.1–7.4) + indexes
 - M4.2 Entities/repos + validations (container_number UNIQUE ISO 6346 checksum test, container_type enum, weight ranges, IMDG fields)
 - M4.3 Register container (ADMIN/TERMINAL_OPERATOR), duplicate → 409, event `ContainerRegistered`
-- M4.4 State machine service (pure domain): allowed-transition table, rejected → 409 with prior/new state in error body; status_history append
+- M4.4 State machine service (pure domain): allowed-transition table, rejected → 422 with prior/new state in error body (per §2.6/§5.2 and D-434; DoD "409" wording superseded); status_history append
 - M4.5 Movement recording: GATE_IN/OUT, YARD_MOVE, VESSEL_LOAD/DISCHARGE with from/to location, performed_by audit
 - M4.6 Query: get by number/barcode, history/replay, filter+pagination (M2.3)
 - M4.7 Event publisher: `ContainerStatusChanged`, `ContainerMoved`, `ContainerRemoved` → smartportx.domain-events (routing `container.{type}`), idempotent consumers later

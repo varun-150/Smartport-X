@@ -381,7 +381,7 @@ Master container record. Single source of truth for container metadata.
 CREATE TABLE smartportx_container.containers (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     container_number      VARCHAR(11)   NOT NULL UNIQUE,
-    container_type        VARCHAR(10)   NOT NULL,  -- '20DC', '40DC', '40HC', '45HC', '20RF', '40RF'
+    container_type        VARCHAR(10)   NOT NULL,  -- '20DC', '40DC', '40HC', '45HC', '20RF', '40RF', '20TK', '40TK'
     owner                 VARCHAR(100)  NULL,
     consignee             VARCHAR(100)  NULL,
     shipper               VARCHAR(100)  NULL,
@@ -421,6 +421,8 @@ CREATE TABLE smartportx_container.containers (
 | `45HC` | 45ft High Cube |
 | `20RF` | 20ft Reefer |
 | `40RF` | 40ft Reefer |
+| `20TK` | 20ft Tank Container |
+| `40TK` | 40ft Tank Container |
 
 #### 7.2 container_movements
 

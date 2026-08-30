@@ -97,7 +97,84 @@
 - **Action:** script headers/doc say "Git Bash (or WSL)"; no repo change required beyond documenting.
 - **Status:** RESOLVED (workaround documented; R-007 still governs Docker/WSL2).
 
---------------------------------------------------------------------------------
+## F-412 — CI backend job had no database for integration tests
+- **Observed:** GitHub Actions runner is empty; identity (and future service) integration tests need a live
+  Postgres with the `smartportx` database + schemas. The backend job ran `mvn clean verify` with no DB service,
+  so M3 integration suites could never pass in CI.
+- **Impact:** no regression signal from PRs; CI green claim would be false.
+- **Resolution:** add `services: postgres:17` (postgres/postgres, port 5432, pg_isready health) and an
+  `Init databases (schemas per service)` step that installs `postgresql-client`, sets PGHOST/PGPASSWORD and runs
+  `scripts/init-databases.sh` (idempotent, proven E-022). docker/scan stages remain `if: false` until M12.
+- **Status:** RESOLVED (workflow + script verified statically; first green GitHub Actions run lands on push).
+
+## F-413 — Identity `GET /users` first-cut drifted from API-CONTRACTS §3.2
+- **Observed:** at M3.7 self-check the implementation bound bare query params `role`/`status`/`search` and
+  defaulted list order to ASCENDING; API-CONTRACTS §3.2 (with D-432) mandates `filter[role]`, `filter[status]`,
+  `filter[search]` and a `sort` fixed on `createdAt,desc` by default.
+- **Impact:** contract-faithful clients would send `filter[...]`/rely on desc and get wrong results or 400s.
+- **Resolution:** controller binds `filter[...]` names + `sort`; `UserQueryService` added ASC/DESC keyset
+  predicates with DESC default; unsupported sort → 400 `invalid_query` (InvalidQueryException, RFC 9457).
+  Locked by 8-test conformance suite (E-025).
+- **Status:** RESOLVED (2026-08-30, M3.7).
+
+-## F-414 — API-CONTRACTS §5 lifecycle vocabulary diverges from canonical DATA-ARCHITECTURE §7 (D-411)
+- **Observed:** at M4.0 contract read, API-CONTRACTS §5 (Container Service) still carries the D-411-superseded
+  vocabulary: state machine `EXPECTED → RECEIVED → IN_YARD → POSITIONED → READY_FOR_PICKUP → LOADED → RELEASED →
+  GATE_OUT` (§5.2, line 1685), create response `"status": "EXPECTED"`, 8 movement types incl. `VESSEL_LOADING`,
+  `YARD_PLACEMENT`, `RESHUFFLE`, `POSITION_CHANGE`, `TRANSSHIPMENT` (§5.3) — while DATA-ARCHITECTURE §7.1 (canonical
+  per D-411) defines REGISTERED/AT_GATE/IN_YARD/LOADED/DISCHARGED/AT_GATE_OUT/DEPARTED/HELD and §7.2 defines 5
+  movement types (GATE_IN, GATE_OUT, YARD_MOVE, VESSEL_LOAD, VESSEL_DISCHARGE). §5.3 event log exposes
+  STATUS_CHANGE/MOVEMENT/CUSTOMS_UPDATE/IOT_READING/DOCUMENT_UPLOADED/ALERT/MANUAL_NOTE tokens; GET /{id} response
+  embeds `customsStatus` + `currentBlockCode` (integration/yard-owned data). Container port declared 8083 in §intro
+  (lines 68/115) vs canonical 8084. §7.1 container-type comment lists 6 codes; API validation table lists 8 (adds
+  20TK/40TK — valid ISO tank types).
+- **Impact:** implementing §5 literally would re-introduce the two-enum conflict D-411 resolved and force container
+  to serve data it does not own (customs, block codes).
+- **Resolution:** implementation uses DATA-ARCHITECTURE §7.1/§7.2 + D-411 vocabulary; container types = 8 (superset
+  20TK/40TK per API validation table); event log exposes REGISTERED/STATUS_CHANGE/MOVEMENT/REMOVED tokens (contract
+  §5.3 shape); aggregation-only fields not returned. API-CONTRACTS §5 amended at end-of-M4 doc-fix sweep (D-435).
+- **Status:** RESOLVED (2026-08-30, D-435).
+
+## F-415 — M4 plan DoD says invalid transitions → 409; API-CONTRACTS §2.6/§5.2 says 422
+- **Observed:** M4.4 DoD (PHASE-4-IMPLEMENTATION-PLAN) reads "rejected → 409 with prior/new state in error body".
+  API-CONTRACTS §2.6 table maps 422 `/errors/business-rule-violation` to "valid syntax but violates business logic"
+  and §5.2 errors show 422 for `LOADED`→`EXPECTED`. Identity precedent (D-432) had the contract win on HTTP semantics.
+- **Impact:** two governing docs disagree on a client-visible status code.
+- **Resolution:** invalid state transition → 422 `invalid_status_transition` (D-434); plan DoD wording amended to match.
+- **Status:** RESOLVED (2026-08-30, D-434).
+
+## F-416 — Container `application.yml` had a top-level `jackson:` block (malformed YAML nesting)
+- **Observed:** at the first M4.8 integration test run, 36/50 tests errored before execution — context load
+  failed with `... while parsing a block mapping in '.../application.yml'`. The `jackson:` key sat at column 0
+  instead of being nested under `spring:`.
+- **Impact:** `BaseContainerIntegrationTest` could not boot the `ApplicationContext` at all; the whole container
+  integration suite was red. Identity's equivalent file was correctly nested, so this was a generator-scaffold slip.
+- **Resolution:** re-indented the block to `spring.jackson.default-property-inclusion: non_null` (SC-11).
+  Full suite then loaded the context.
+- **Status:** RESOLVED (2026-08-30, M4.8, E-026).
+
+## F-417 — Controller-layer `@PreAuthorize` denials degraded to 500 instead of 403 `access_denied`
+- **Observed:** 3/50 tests (reader role calling register/status-change/record-movement) returned 500. Spring
+  Security 6.3+ throws `AuthorizationDeniedException` from `@PreAuthorize` at the controller layer; common
+  `GlobalExceptionHandler`'s `Throwable` catch-all mapped it to 500.
+- **Impact:** a genuine authorization failure became an internal error; RFC 9457 `access_denied` (403) never
+  reached the client; identity parity broken.
+- **Resolution:** added `ContainerExceptionAdvice` (`basePackages=com.smartportx.container.web`) with
+  `@ExceptionHandler(AccessDeniedException.class)` → 403 ProblemDetail `access_denied`, mirroring identity's
+  `IdentityExceptionAdvice` (SC-12). Note `AuthorizationDeniedException` extends `AccessDeniedException`.
+- **Status:** RESOLVED (2026-08-30, M4.8, E-026).
+
+## F-418 — `TestContainerNumbers` fixed `TSTU100000+` sequence collided across surefire runs
+- **Observed:** the second full test run produced 22 duplicate-registration 409 failures. The test-number helper
+  used a fixed base (`TSTU` + `100000+n`), so rows persisted in the shared `smartportx_container` schema by earlier
+  runs (no `@Transactional`, per TEST-STRATEGY) collided with the client-generated sequence.
+- **Impact:** flaky/serial-only suite; re-running the same milestone tests would fail on any populated dev DB.
+- **Resolution:** `TestContainerNumbers.next()` now seeds a per-JVM random 6-digit serial
+  (`10_000 + ThreadLocalRandom.current().nextInt(0, 900_000)`) with wraparound via `reset()` when the 999_999
+  ceiling is crossed (SC-13). Tests keep self-isolating via unique numbers/owners.
+- **Status:** RESOLVED (2026-08-30, M4.8, E-026).
+
+-------------------------------------------------------------------------------
 ## APPENDIX — HONEST-BASELINE
 As of 2026-08-27 (Phase 4 kickoff) the repository is documentation-only: no pom.xml, no source directories,
 zero git commits, no schemas, no containers. All FINDINGS above are about DOCUMENT-LEVEL conflicts, not

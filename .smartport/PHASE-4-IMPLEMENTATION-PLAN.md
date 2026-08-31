@@ -183,16 +183,17 @@ Increments (TDD):
 --------------------------------------------------------------------------------
 ### M5 — YARD SERVICE (Level 1 — owns slots)
 **Source of truth:** DATA-ARCHITECTURE §6, API-CONTRACTS yard endpoints, COMMUNICATION-ARCHITECTURE yard events, RESILIENCE-ARCHITECTURE.
-**DoD:** block/bay/row/tier inventory; `assignSlot` returns concrete position, conflict → 409; optimization baseline (= D-006 simplified heuristics) with explainable reason; `YardPositionAssigned/Freed` events; integration → container status + gate available.
+**DoD:** block/bay/row/tier inventory; `assignSlot` returns concrete position, conflict → 409; optimization baseline (= D-006 simplified heuristics) with explainable reason; `YardPositionAssigned/Freed` events; integration → container status + gate available; equipment registry (FR-008.1–4, D-444).
 
 Increments (TDD):
-- M5.1 Flyway V1: yard_blocks, yard_bays, yard_rows, yard_tiers, yard_metrics, optimization_history (§6.1–6.6) + sample block seed
+- M5.1 Flyway V1: yard_blocks, yard_bays, yard_rows, yard_tiers, yard_metrics, optimization_history (§6.1–6.6) + yard_equipment (§6.7, D-444) + sample block seed
 - M5.2 Slot model: full location key BLOCK-BAY-ROW-TIER; constraints (IMDG segregation, reefer power bays option), occupancy query (JPA query vs cache; N+1 guard)
 - M5.3 `assignSlot(container)` — nearest-walk heuristic + IMDG separation; returns position or 409 if none; `YardPositionAssigned` event
 - M5.4 `freeSlot`, `moveContainer` (single/dispatch), conflict check (two moves same slot → 409), `YardPositionFreed`
-- M5.5 Optimization baseline `yard.optimization-run`: count reshuffles, suggest moves for a block; **explainable** (`reason` string: nearest block / IMDG segregation / reshuffle-reduction); stores optimization_history row
+- M5.5 Optimization baseline `yard.optimization-run`: count reshuffles, suggest moves for a block; **explainable** (`reason` string: nearest block / IMDG segregation / reshuffle-reduction); stores optimization_history row; crane→block suggestion (FR-008.2, D-444)
 - M5.6 Yard API tests + contract tests (provider) for `/api/yard/*`
 - M5.7 Client stubs: yard→container, yard→gate (Resilience4j, 5s/1 retry) — callable, verified via contract consumer tests
+- M5.8 Equipment API: `GET /api/v1/yard/equipment`, `GET/PUT /api/v1/yard/equipment/{equipmentId}` (status/assignment, `yard:write`), `GET .../moves` (FR-008.4); OUT_OF_SERVICE → 409 + `yard.EquipmentStatusChanged` (FR-008.3); moves counter increment on executed moves (D-444)
 
 --------------------------------------------------------------------------------
 ### M6 — GATE SERVICE (Level 2 — appointments + check-in/out)

@@ -250,6 +250,50 @@
 - **Consequences:** §5.3 sample updated to show `source: null`; no false attribution data persisted.
 - **Status:** ACCEPTED (2026-08-30, M4.8).
 
+## D-441 — Yard block type enum is a superset: API-CONTRACTS §4 wins, DATA-ARCHITECTURE §6.1 amended
+- **Context:** API-CONTRACTS §4.1 defines 6 block types (`EXPORT, IMPORT, TRANSIT, REFRIGERATED, DANGEROUS, EMPTY`); DATA-ARCHITECTURE §6.1 defines 4 storage-oriented types (`DRY, REEFER, SOC, HAZMAT`). Traceability maps FR-001/FR-008 to Yard.
+- **Decision:** `yard_blocks.block_type` accepts the API-CONTRACTS §4.1 superset (6 values). The §6.1 comment string is a storage-oriented subset — amended at M5.7 doc-fix sweep to list all 6 values. Layout/block responses expose `type` from this enum.
+- **Consequences:** FR-001.5/FR-008 block filtering (e.g. `refrigeratedSlots`, `dangerousGoodsAllowed`) derives from block type; IMport/EXPORT semantics flow through the naming only.
+- **Status:** ACCEPTED (2026-08-30, M5 planning).
+
+## D-442 — Yard position format is `B{block}-B{bay}-R{row}-T{tier}` (zero-padded, 2-digit) per API-CONTRACTS §4.1
+- **Context:** API-CONTRACTS §4.1 positions look like `B01-B01-R01-T01`; DATA-ARCHITECTURE §7.1 `containers.current_location` example is a longer free-text (`'BLOCK-A-BAY-03-ROW-02-TIER-01'`).
+- **Decision:** canonical position string = `B{blockCode}-B{bay}-R{row}-T{tier}` with 2-digit zero-padded numbers, e.g. `B01-B01-R01-T01`. `current_location` in container service stores the same token (container already copies it; no cross-format drift). 3+ digit numbers (e.g. bay 120) print unpadded after `B`.
+- **Consequences:** layout tiers, `assignSlot` return, and `ContainerService.currentLocation` all share one format; API-CONTRACTS examples are exact. DATA-ARCHITECTURE §7.1 example amended at sweep.
+- **Status:** ACCEPTED (2026-08-30, M5 planning).
+
+## D-443 — Yard optimization strategy enum: API-CONTRACTS §4.2 (`FIFO, WEIGHT_CLUSTER, DEPARTURE_CLUSTER, BALANCED`) is canonical
+- **Context:** API-CONTRACTS §4.2 defines 4 named strategies; DATA-ARCHITECTURE §6.6 `optimization_history.strategy` comment only lists `'GREEDY','DYNAMIC','ML_PREDICTIVE'`.
+- **Decision:** optimization_history.strategy = the API-CONTRACTS §4.2 enum. DATA-ARCHITECTURE §6.6 comment amended at M5.7 sweep to reference the canonical set. Analyzer/optimizer emits these four; `BALANCED` is the D-006 baseline composite.
+- **Consequences:** strategy values persisted match the wire contract; no translation layer. `DEPARTURE_CLUSTER` is the primary explainable strategy in M5.5.
+- **Status:** ACCEPTED (2026-08-30, M5 planning).
+
+## D-444 — Equipment Management (FR-008.1–4) lands as a yard-owned `yard_equipment` registry + endpoints in M5
+- **Context:** REQUIREMENTS.md FR-008.1–4 (vendor-neutral: equipment status, crane scheduling recommendation, downtime handling, moves-per-crane metric) is mapped to Yard by REQUIREMENT-ARCHITECTURE-TRACEABILITY, but DATA-ARCHITECTURE §6 has **no equipment table** and no M5 plan increment names one. User decision (2026-08-30): include equipment management in M5 rather than defer.
+- **Decision:** add `yard_equipment` (RR-typed crane registry: `code`, `equipment_type 'RTG'|'ASC'`, `assigned_block_id`, `status 'AVAILABLE'|'ASSIGNED'|'OUT_OF_SERVICE'`, `moves_total` counter, timestamps) + DDL in V1__init.sql. Endpoints: `GET /api/v1/yard/equipment`, `GET/PUT /api/v1/yard/equipment/{equipmentId}` for status/assignment (manual updates, RBAC `yard:write`), `GET /api/v1/yard/equipment/{equipmentId}/moves` (FR-008.4 metric). `OUT_OF_SERVICE` → 409 on assignment attempts + `yard.EquipmentStatusChanged` event (FR-008.3). FR-008.2 rides the M5.5 optimizer: crane→block suggestion returned when `dryRun=false` persist executed moves to block's equipment counter. API-CONTRACTS §4 gains a §4.4 Equipment section; DATA-ARCHITECTURE §6 gains §6.7 yard_equipment — both applied at M5.7 doc-fix sweep.
+- **Consequences:** FR-008.1–4 verifiable in M5 with real registry + tests; events align to existing `smartportx.domain-events` transport. Equip/metrics tables extend DATA-ARCHITECTURE §6 — superset DDL pattern same as D-431/D-436.
+- **Status:** ACCEPTED (2026-08-30, M5 planning).
+
+## D-445 — Yard authorization is role-based per API-CONTRACTS §4 role columns; the JWT `permissions` claim stays advisory for M5 (vocabulary reconciliation deferred to M10)
+- **Context:** M5 realized yard authZ with `@PreAuthorize hasAnyRole` guards (GETs authenticated; PUT
+  block / tier-container / equipment `ADMIN|YARD_MANAGER|TERMINAL_OP`; DELETE tier-container + POST optimize
+  `ADMIN|YARD_MANAGER`) — matching the API-CONTRACTS §4/§4.4 role columns. Identity still issues a
+  dot-vocabulary `permissions` claim (`yards.read`/`yards.write`) that excludes TERMINAL_OP from yard scopes,
+  while documentation and D-444 name a colon vocabulary (`yard:write`). See F-420.
+- **Decision:** keep yard authZ role-based for the whole slice; do **not** refactor identity claim
+  vocabulary now (would ripple through M3/M4 contract-conformance tests for no runtime gain). The
+  `permissions` claim is advisory until the gateway consumes it (SR-005 role-filtered routing, FR-006.1
+  role-shaped dashboards, M10/M11). PHASE-4-IMPLEMENTATION-PLAN M10 increment gains a reconciliation item
+  (permission vocabulary unification or an explicit mapping) — recorded as part of this decision so the
+  deferral is not lost.
+- **Consequences:** TERMINAL_OP can update yard state at the service (by role) even though its token carries
+  no `yards.*` permission — intended for M5; any future gateway/dashboard permission check must wait for the
+  M10 reconciliation. Cross-service event payload shape consciously diverges: container events carry
+  `JsonNode` payloads (D-438) while yard events carry typed record payloads — both serialize to JSON on the
+  shared `smartportx.domain-events` transport; no service consumes another's events in code today, so impact
+  is nil; unify at M12 hardening if a cross-service consumer appears.
+- **Status:** ACCEPTED (2026-08-31, M5 close-out).
+
 -------------------------------------------------------------------------------
 ## PENDING / OPEN DECISIONS (surface before final gate)
 - D-420: Notification service persistence (depends F-407 §11 read at M9).

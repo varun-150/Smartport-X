@@ -4,7 +4,7 @@
 > NOT STARTED / SCAFFOLDED / IN PROGRESS / IMPLEMENTED / TESTED / VERIFIED / BLOCKED.
 > Evidence IDs refer to EVIDENCE.md. Requirements reference the canonical counts:
 > 46 FR (REQUIREMENTS.md) / 16 NFR groups (NON-FUNCTIONAL-REQUIREMENTS.md) / 36 SR (SECURITY-REQUIREMENTS.md).
-> Last updated: 2026-08-27 (M0 verified; M1 in progress).
+> Last updated: 2026-08-31 (M5 yard verified).
 
 --------------------------------------------------------------------------------
 ## 1. SERVICE STATUS
@@ -14,7 +14,7 @@
 | smartportx-common | smartportx-common | — | — | TESTED | TESTED | — | — | — | — | — | E-023 |
 | smartportx-identity | smartportx-identity | 8081 | smartportx_identity | SCAFFOLDED | — | — | — | — | — | — | E-021 |
 | smartportx-container | smartportx-container | 8084 | smartportx_container | SCAFFOLDED | — | — | — | — | — | — | E-021 |
-| smartportx-yard | smartportx-yard | 8082 | smartportx_yard | SCAFFOLDED | — | — | — | — | — | — | E-021 |
+| smartportx-yard | smartportx-yard | 8082 | smartportx_yard | VERIFIED | — | 37 | — | — | — | — | E-027 |
 | smartportx-gate | smartportx-gate | 8083 | smartportx_gate | SCAFFOLDED | — | — | — | — | — | — | E-021 |
 | smartportx-vessel | smartportx-vessel | 8085 | smartportx_vessel | SCAFFOLDED | — | — | — | — | — | — | E-021 |
 | smartportx-integration | smartportx-integration | 8086 | smartportx_integration | SCAFFOLDED | — | — | — | — | — | — | E-021 |
@@ -51,8 +51,9 @@
 | FR-005 appointment booking + quotas | M6 | NOT STARTED | — |
 | FR-006 real-time role-based dashboards | M9+M11 | NOT STARTED | — |
 | FR-007 gate check-in/check-out | M6 | NOT STARTED | — |
-| FR-008 yard slots + movements | M5 | NOT STARTED | — |
-| FR-009 optimization w/ explanation | M5 | NOT STARTED | — |
+| FR-001 Container Yard Management (FR-001.1–8) | M5 | VERIFIED | E-027 |
+| FR-002 AI-Driven Stacking Optimization (FR-002.1–6) | M5 | VERIFIED | E-027 |
+| FR-008 Equipment Management (FR-008.1–4) | M5 | VERIFIED | E-027 |
 | FR-010 vessel schedules + discharge | M7 | NOT STARTED | — |
 | FR-011 EDIFACT inbound | M8 | NOT STARTED | — |
 | FR-012 IoT sim | M8 | NOT STARTED | — |
@@ -60,6 +61,11 @@
 | FR-014 notifications/alerts | M9 | NOT STARTED | — |
 | FR-015 admin user management | M3+M11 | PARTIAL (M3 API VERIFIED; admin dashboard part in M11) | E-024/E-025 |
 | FR-016..FR-046 remaining (see REQUIREMENTS.md) | per milestone | NOT STARTED | — |
+
+> **Numbering note (F-419):** pre-M5 rows (FR-001…FR-007, FR-010+) use the internal milestone-slice numbering
+> (identity = FR-001/FR-002, container = FR-003/FR-004, etc.). From M5 the rows use the canonical
+> REQUIREMENTS.md IDs (FR-001 Yard, FR-002 Optimization, FR-008 Equipment). Duplicate FR numbers across M3/M4/M5
+> rows are therefore different requirement sets until the full reconciliation at M12.7.
 
 ## 4. NON-FUNCTIONAL REQUIREMENTS (16 groups)
 Tracked in: NFR → milestone | status | evidence | measurement source. Fully populated at M12.
@@ -84,7 +90,7 @@ Security status rolled per service `XSecurityTest` (TEST-STRATEGY §7). Full map
 | M2 common | 2026-08-27 | RFC 9457 error model + no-leak 500, correlation filter, pagination/sort, DomainEvent, metrics/health/tracing, auto-config starter (17 tests + identity context smoke green) | E-023 | — |
 | M3 identity | 2026-08-30 | Auth + profiles + admin mgmt slice live: JWT + refresh rotation (ADR-009), 5-role RBAC (D-429/D-430), password history, cursor paging, rate limit; 15 core + 8 contract-conformance tests = 23/23 (identity) + 17/17 (common), BUILD SUCCESS | E-024/E-025 | — |
 | M4 container | 2026-08-30 | Registry + lifecycle slice live: CRUD (ISO 6346 + DL check digit), 15-edge state machine (D-434), movements + status history, event log REGISTERED/STATUS_CHANGE/MOVEMENT/REMOVED + Rabbit/Log transports (D-438), RBAC writes, cursor paging; 14 unit + 36 integration = 50/50; reactor 11/11 BUILD SUCCESS; SC-11/12/13 closed; API-CONTRACTS §5 + DATA-ARCHITECTURE §7.1 doc-fix sweep applied | E-026 | — |
-| M5 yard | — | — | — | — |
+| M5 yard | 2026-08-31 | Yard slice live: layout/bays/blocks/tier update + container assign/remove with constraint checks (FR-001), explainable optimizer (4 strategies, dry-run, history, executed-move counters) (FR-002), equipment registry + status + OUT_OF_SERVICE 409 + moves metric (FR-008); domain events POSITION_ASSIGNED/FREED/OPTIMIZATION_RUN/EQUIPMENT_STATUS_CHANGED (Log+Rabbit transports, typed payloads); RBAC role guards; 37/37 integration tests, verify BUILD SUCCESS; F-419 applied, F-420/F-421 recorded, D-445; API-CONTRACTS §4.4 + DATA-ARCHITECTURE §6.7 + §6.1/§6.6 comment sweep applied | E-027 | — |
 | M6 gate | — | — | — | — |
 | M7 vessel | — | — | — | — |
 | M8 integration | — | — | — | — |

@@ -174,6 +174,49 @@
   ceiling is crossed (SC-13). Tests keep self-isolating via unique numbers/owners.
 - **Status:** RESOLVED (2026-08-30, M4.8, E-026).
 
+## F-419 — IMPLEMENTATION-STATUS FR roll-up rows for M5 do not match REQUIREMENTS.md FR-008/FR-009
+- **Observed:** IMPLEMENTATION-STATUS §3 lists "FR-008 yard slots + movements" and "FR-009 optimization w/ explanation" for M5. REQUIREMENTS.md FR-008 is **Equipment Management** (FR-008.1–4, cranes), and yard slots/optimization are actually **FR-001** (Container Yard Management, FR-001.1–8) and **FR-002** (AI-Driven Stacking Optimization, FR-002.1–6). The roll-up table's FR numbering and the REQUIREMENTS.md numbering are different schemes; the M5 milestone slice was labeled against the wrong row IDs.
+- **Impact:** milestone→requirement trace read literally would claim M5 verifies "yard slots" under FR-008 while FR-009 doesn't exist in REQUIREMENTS.md; equipment requirements (real FR-008) would appear unverified.
+- **Resolution:** M5 close-out will reference **FR-001 + FR-002 + FR-008** as the requirement set verified for the yard milestone; IMPLEMENTATION-STATUS §3 rows updated at M5.7 to point at the canonical IDs (F-419 noted, applied in close-out row wording). No code impact — purely a traceability-label fix.
+- **Status:** RESOLVED (2026-08-30, M5 planning; reflected in M5 close-out).
+
+## F-420 — JWT `permissions` claim vocabulary does not match the documented RBAC scheme; TERMINAL_OP has no yard permission
+- **Observed:** identity `RolePermissions` (smartportx-identity → JWT `permissions` claim) issues a dot
+  vocabulary: `yards.read`, `yards.write` (ADMIN, YARD_MANAGER), plus `vessels.*`, `cargo.*`, `gates.*`,
+  `users.*`, `reports.*`. The documentation + decisions reference a colon vocabulary `yard:read` /
+  `yard:write` (API-CONTRACTS §2 sample, D-444 "RBAC `yard:write`", ARCHITECTURE-OVERVIEW §5,
+  SECURITY-ARCHITECTURE role–permission matrix). Separately, TERMINAL_OP — which API-CONTRACTS §4 lets update
+  blocks / tier-container / equipment — carries **no** yard-scoped permission at all
+  (`vessels.read/write`, `cargo.read/write` only), while READONLY *does* hold `yards.read`.
+- **Impact:** latent, not runtime. The yard service authorizes by the role claim
+  (`hasAnyRole ADMIN|YARD_MANAGER|TERMINAL_OP` per API-CONTRACTS §4 role columns) and never consults the
+  `permissions` claim. But any future consumer built against the documented `yard:*` vocabulary — gateway
+  role-filtered routing + `X-User-Perms` per SR-005, dashboard role-shaped responses per FR-006.1 (M10/M11) —
+  will not match tokens issued by identity, and TERMINAL_OP would fail yard-scoped checks outright.
+- **Resolution:** recorded non-blocking for M5 (D-445). Identity claim vocabulary unchanged; yard authZ
+  stays role-based. PHASE-4-IMPLEMENTATION-PLAN M10 increment gains a reconciliation item (unify permission
+  vocabulary — dot → colon or an explicit mapping — before gateway/dashboard consume the claim). No gateway
+  code must hard-code English permission names before that reconciliation.
+- **Status:** OPEN (2026-08-31, M5 close-out; resolution planned at M10 per D-445).
+
+## F-421 — Optimizer `analysis` fields `totalContainers`/`containersAffected` are recommendation counts, `estimatedExecutionTimeMs` is fixed 0
+- **Observed:** YardOptimizationController builds the response `Analysis` as `totalContainers =
+  recommendations.size()`, `containersAffected = recommendations.size()`, `estimatedExecutionTimeMs = 0L`.
+  API-CONTRACTS §4.2 documents these as block container totals (450), containers needing moves (112), and an
+  execution-time estimate (45000 ms). `currentReshuffles` / `projectedReshuffles` /
+  `estimatedReshufflingReduction` are computed honestly in YardOptimizationService. (An earlier
+  "totalContainers=0" observation during M5 test development was a pre-wiring artifact; after wiring the
+  field carries the recommendation count.)
+- **Impact:** low — metrics/frontend consumers reading §4.2 semantics get placeholder values; no M5 test
+  asserts these fields (the suite asserts the honest reshuffle metrics + recommendation shape). FR-002
+  verifiability is unaffected. The optimizer's "recommendation only when the column's topmost tier is
+  occupied" behavior was verified as correct design (no buried container needs reshuffling when the top is
+  free) — a documentation note, not a defect.
+- **Resolution:** defer to M12.5 hardening — populate `totalContainers` from the occupied-container count,
+  keep `containersAffected` = recommendation count, and either measure `estimatedExecutionTimeMs` or return
+  null with a §4.2 note. Recorded now to keep the ledger honest at close-out.
+- **Status:** OPEN (2026-08-31, M5 close-out; fixed at M12.5).
+
 -------------------------------------------------------------------------------
 ## APPENDIX — HONEST-BASELINE
 As of 2026-08-27 (Phase 4 kickoff) the repository is documentation-only: no pom.xml, no source directories,

@@ -259,7 +259,7 @@ CREATE TABLE smartportx_yard.yard_blocks (
     total_bays    INT           NOT NULL,
     total_rows    INT           NOT NULL,
     total_tiers   INT           NOT NULL,
-    block_type    VARCHAR(20)   NOT NULL,  -- 'REEFER', 'DRY', 'SOC', 'HAZMAT'
+    block_type    VARCHAR(20)   NOT NULL,  -- 'EXPORT','IMPORT','TRANSIT','REFRIGERATED','DANGEROUS','EMPTY' (D-441 superset)
     location_x    FLOAT         NOT NULL,
     location_y    FLOAT         NOT NULL,
     created_at    TIMESTAMP     NOT NULL DEFAULT NOW(),
@@ -356,7 +356,7 @@ Records each yard optimization run for audit and performance comparison.
 CREATE TABLE smartportx_yard.optimization_history (
     id                             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     block_id                       UUID          NOT NULL REFERENCES smartportx_yard.yard_blocks(id),
-    strategy                       VARCHAR(30)   NOT NULL,  -- 'GREEDY', 'DYNAMIC', 'ML_PREDICTIVE'
+    strategy                       VARCHAR(30)   NOT NULL,  -- 'FIFO','WEIGHT_CLUSTER','DEPARTURE_CLUSTER','BALANCED' (D-443 superset)
     container_count                INT           NOT NULL,
     estimated_reshuffling_reduction FLOAT        NULL,
     execution_time_ms              INT           NULL,
@@ -364,6 +364,28 @@ CREATE TABLE smartportx_yard.optimization_history (
     created_at                     TIMESTAMP     NOT NULL DEFAULT NOW()
 );
 ```
+
+#### 6.7 yard_equipment
+
+Yard crane/equipment registry (D-444, FR-008.1–4). Manual status/assignment updates; `moves_total` accumulates executed optimizer moves (FR-008.2/4).
+
+```sql
+CREATE TABLE smartportx_yard.yard_equipment (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code             VARCHAR(20)   NOT NULL UNIQUE,
+    equipment_type   VARCHAR(10)   NOT NULL,  -- 'RTG','ASC'
+    assigned_block_id UUID         NULL REFERENCES smartportx_yard.yard_blocks(id) ON DELETE SET NULL,
+    status           VARCHAR(20)   NOT NULL DEFAULT 'AVAILABLE',  -- 'AVAILABLE','ASSIGNED','OUT_OF_SERVICE'
+    moves_total      INT           NOT NULL DEFAULT 0,
+    created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+```
+
+**Design Notes:**
+- `OUT_OF_SERVICE` equipment blocks assignment attempts (409) and is skipped when selecting a crane for executed optimizer moves.
+- `moves_total` is incremented by completed `dryRun=false` optimizer moves; status flips `AVAILABLE → ASSIGNED` when the selected crane is first bound to a block.
+- API surface: API-CONTRACTS §4.4.
 
 ---
 

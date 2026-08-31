@@ -302,3 +302,41 @@ Each entry:
   smartportx-container; V1__init.sql;
   LogEventTransport emitted domain events with correlationId in MDC during the runs; mvn output
   (Tests run: 50 … BUILD SUCCESS; reactor BUILD SUCCESS).
+
+## E-027: M5 — yard layout, positioning, optimization, equipment, events, RBAC (FR-001/FR-002/FR-008)
+- **Requirement:** M5 per plan — yard layout visualization + block/bay/row/tier hierarchy + container
+  positioning + utilization metrics (FR-001), AI-driven stacking optimization with explainable
+  recommendations + dry-run + history (FR-002), equipment registry + status/assignment/moves (FR-008);
+  decisions D-441…D-444.
+- **Implementation:** Flyway V1 superset DDL in `smartportx_yard` (D-441 six-value block_type, D-443
+  four-value strategy, D-444 yard_equipment) + seed (B01 EXPORT 2 bays × 2 rows × 3 tiers = 12 tiers,
+  RTG-01 ASSIGNED to B01); domain building blocks (YardBlock/Bay/Row/Tier) with position model
+  `B{BLOCK}-B{bay}-R{row}-T{tier}` per D-442; services (YardQueryService, YardMetricsService,
+  YardAssignmentService with occupancy / dangerous-goods / reefer / weight / container-status / stacked-
+  above constraint checks, YardEquipmentService, YardOptimizationService heuristics
+  FIFO | WEIGHT_CLUSTER | DEPARTURE_CLUSTER | BALANCED per D-443 — per-column top-occupied reshuffle scan
+  with lowest-empty-tier targets, dry-run preserved in optimization_history, moves counters incremented
+  on executed runs); OptimizationHistoryRepository cursor-paged history; events (EventTransport pattern
+  mirrored from M4/D-438, yard-domain **typed record** payloads, YardEventsConfig log/rabbit mutually-
+  exclusive beans, vocabulary `yard.YardPositionAssigned | yard.YardPositionFreed | yard.YardOptimizationRun |
+  yard.EquipmentStatusChanged`, source `smartportx-yard`); web (YardController / YardOptimizationController /
+  YardMetricsController / YardEquipmentController + DTO records); security (stateless JWT chain shared via
+  common starter, role guards: GETs authenticated, PUT block/tier-container/equipment
+  `ADMIN|YARD_MANAGER|TERMINAL_OP`, DELETE tier-container + POST optimize `ADMIN|YARD_MANAGER`).
+- **Test:** `mvn -B -ntp -pl smartportx-yard verify` — **37/37 PASS** (5 integration suites: layout 8,
+  assignment 13, optimization 5, equipment 8, events 3). Suites verify position-constraint violations
+  (occupancy 409, stacked-above 422, dangerous-goods / reefer / weight 422, unknown container 404), the RBAC
+  matrix (401 unauthenticated, 403 reader), dry-run analysis (currentReshuffles=1, RESHUFFLE recommendation
+  with non-empty recommendedPosition, status COMPLETED) + unknown-strategy 422 + missing-blockId 400 +
+  history envelope, equipment list/filter/get/update + OUT_OF_SERVICE → 409 on re-assignment + moves, and
+  event-envelope capture via `@MockitoBean EventTransport`. Postgres-backed (shared `smartportx_yard`
+  schema, per-suite `@Transactional`, real repositories resolved per run). Jar repackaged — **BUILD SUCCESS**.
+- **Result:** PASS (FR-001/FR-002/FR-008 delivered; F-419 roll-up label applied; F-420/F-421 recorded,
+  non-blocking; SC-10 CI-green on GitHub Actions + R-007 live RabbitMQ verify still OPEN — local machine
+  cannot execute Actions).
+- **Review:** Lead/Orchestrator + Implementer; decisions D-441…D-444 recorded + D-445; doc-fix sweep
+  applied: API-CONTRACTS §4.4 (Equipment), DATA-ARCHITECTURE §6.1/§6.6 comment amendments + §6.7
+  (yard_equipment), IMPLEMENTATION-STATUS §1/§3/§6.
+- **Evidence:** main sources under smartportx-yard/src/main/java (web/service/domain/repository/event);
+  V1__init.sql (superset DDL + B01/RTG-01 seed); 5 integration suites under smartportx-yard/src/test;
+  mvn output (Tests run: 37 … BUILD SUCCESS; jar repackaged).

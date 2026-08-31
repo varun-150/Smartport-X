@@ -1403,6 +1403,119 @@ Get per-block metrics for comparison.
 
 ---
 
+### 4.4 Equipment Endpoints
+
+Yard crane/equipment registry (FR-008.1–4). Manual status/assignment updates are RBAC `ADMIN`, `YARD_MANAGER`, or `TERMINAL_OP`; read endpoints are any authenticated user.
+
+#### GET /api/v1/yard/equipment
+
+List all equipment (cranes) with current status.
+
+**Authentication:** Bearer token required
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `type` | enum | — | Filter by `RTG` / `ASC` |
+| `status` | enum | — | Filter by `AVAILABLE`, `ASSIGNED`, `OUT_OF_SERVICE` |
+
+**Success Response — 200 OK:**
+
+```json
+{
+  "data": [
+    {
+      "equipmentId": "550e8400-e29b-41d4-a716-446655440000",
+      "code": "RTG-01",
+      "equipmentType": "RTG",
+      "assignedBlockId": "b1a2c3d4-e5f6-7890-abcd-ef1234567890",
+      "status": "ASSIGNED",
+      "movesTotal": 12,
+      "createdAt": "2026-08-26T10:00:00Z",
+      "updatedAt": "2026-08-26T10:30:00Z"
+    }
+  ]
+}
+```
+
+**Equipment Types:** `RTG` (rubber-tyred gantry), `ASC` (automated stacking crane)
+**Equipment Status:** `AVAILABLE`, `ASSIGNED`, `OUT_OF_SERVICE`. An `OUT_OF_SERVICE` equipment is omitted from availability and blocks assignment attempts (409).
+
+---
+
+#### GET /api/v1/yard/equipment/{equipmentId}
+
+Get a single equipment record.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `equipmentId` | UUID | Equipment ID |
+
+**Success Response — 200 OK:** Returns the equipment object (same shape as above; `assignedBlockId` omitted when unassigned due to `non_null` serialization).
+
+**Error Responses:**
+
+| Status | Condition |
+|--------|-----------|
+| 404 | Equipment not found |
+
+---
+
+#### PUT /api/v1/yard/equipment/{equipmentId}
+
+Update equipment status and/or block assignment.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `equipmentId` | UUID | Equipment ID |
+
+**Request Body:**
+
+```json
+{
+  "status": "ASSIGNED",
+  "assignedBlockId": "b1a2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `status` | enum | no | `AVAILABLE`, `ASSIGNED`, `OUT_OF_SERVICE` |
+| `assignedBlockId` | UUID | no | Block to assign (nullable) |
+
+**Success Response — 200 OK:** Returns the updated equipment object.
+
+**Error Responses:**
+
+| Status | Condition |
+|--------|-----------|
+| 404 | Equipment or target block not found |
+| 409 | Equipment is `OUT_OF_SERVICE` (no-op update when status unchanged) |
+
+---
+
+#### GET /api/v1/yard/equipment/{equipmentId}/moves
+
+Moves-per-crane metric (FR-008.4).
+
+**Success Response — 200 OK:**
+
+```json
+{
+  "equipmentId": "550e8400-e29b-41d4-a716-446655440000",
+  "code": "RTG-01",
+  "movesTotal": 12,
+  "lastUpdated": "2026-08-26T10:30:00Z"
+}
+```
+
+---
+
 ## 5. Container Service
 
 > **Service:** smartportx-container  

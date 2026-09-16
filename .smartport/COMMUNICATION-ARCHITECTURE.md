@@ -869,151 +869,181 @@ resilience4j_circuitbreaker_calls_seconds_count{name="container-service", kind="
 spring:
   cloud:
     gateway:
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
-        - name: Retry
-          args:
-            retries: 3
-            statuses: BAD_GATEWAY, SERVICE_UNAVAILABLE
-            methods: GET
-            backoff:
-              firstBackoff: 500ms
-              maxBackoff: 5s
-              factor: 2
-              basedOnPreviousValue: true
-
+      # No StripPrefix, no Retry default-filter: all controllers mount at
+      # /api/v1/... (identity AuthController/UserAdminController; yard/gate/
+      # container/vessel/notification @RequestMapping("/api/v1/...")), so the
+      # gateway forwards the full path unchanged. Per-route CircuitBreaker
+      # with a gateway-local FallbackController (forward:/fallback/{svc} →
+      # RFC 9457 problem+json, 503; 504 when the downstream timeout fired).
+      # Each route URI is an env placeholder (default lb://…) so tests can
+      # redirect a route to a stub upstream. URI env vars:
+      #   GATEWAY_URI_SMARTPORTX_IDENTITY            (2 routes)
+      #   GATEWAY_URI_SMARTPORTX_{CONTAINER,YARD,GATE,VESSEL,INTEGRATION,NOTIFICATION}
+      #   GATEWAY_URI_SMARTPORTX_NOTIFICATION_WS     (lb:ws://… for /ws/**)
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 2000
+            response-timeout: 5s
       routes:
-        # ── Identity Service ──
-        - id: smartportx-identity
-          uri: lb://smartportx-identity
+        # ── Identity Service (split into public auth + admin user routes) ──
+        - id: smartportx-identity-auth
+          uri: ${GATEWAY_URI_SMARTPORTX_IDENTITY:lb://smartportx-identity}
           predicates:
-            - Path=/api/v1/identity/**
+            - Path=/api/v1/auth/**
           filters:
-            - StripPrefix=2
             - name: CircuitBreaker
               args:
-                name: identity-service
+                name: gateway-identity
                 fallbackUri: forward:/fallback/identity
 
-        # ── Yard Service ──
-        - id: smartportx-yard
-          uri: lb://smartportx-yard
+        - id: smartportx-identity-users
+          uri: ${GATEWAY_URI_SMARTPORTX_IDENTITY:lb://smartportx-identity}
           predicates:
-            - Path=/api/v1/yard/**
+            - Path=/api/v1/users/**
           filters:
-            - StripPrefix=2
             - name: CircuitBreaker
               args:
-                name: yard-service
-                fallbackUri: forward:/fallback/yard
-
-        # ── Gate Service ──
-        - id: smartportx-gate
-          uri: lb://smartportx-gate
-          predicates:
-            - Path=/api/v1/gate/**
-          filters:
-            - StripPrefix=2
-            - name: CircuitBreaker
-              args:
-                name: gate-service
-                fallbackUri: forward:/fallback/gate
+                name: gateway-identity
+                fallbackUri: forward:/fallback/identity
 
         # ── Container Service ──
         - id: smartportx-container
-          uri: lb://smartportx-container
+          uri: ${GATEWAY_URI_SMARTPORTX_CONTAINER:lb://smartportx-container}
           predicates:
             - Path=/api/v1/containers/**
           filters:
-            - StripPrefix=2
             - name: CircuitBreaker
               args:
-                name: container-service
+                name: gateway-container
                 fallbackUri: forward:/fallback/container
 
-        # ── Vessel Service ──
-        - id: smartportx-vessel
-          uri: lb://smartportx-vessel
+        # ── Yard Service ──
+        - id: smartportx-yard
+          uri: ${GATEWAY_URI_SMARTPORTX_YARD:lb://smartportx-yard}
           predicates:
-            - Path=/api/v1/vessels/**
+            - Path=/api/v1/yard/**
           filters:
-            - StripPrefix=2
             - name: CircuitBreaker
               args:
-                name: vessel-service
+                name: gateway-yard
+                fallbackUri: forward:/fallback/yard
+
+        # ── Gate Service (gate + appointment + quota sub-routes) ──
+        - id: smartportx-gate
+          uri: ${GATEWAY_URI_SMARTPORTX_GATE:lb://smartportx-gate}
+          predicates:
+            - Path=/api/v1/gate/**,/api/v1/appointments/**,/api/v1/quotas/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-gate
+                fallbackUri: forward:/fallback/gate
+
+        # ── Vessel Service (vessel + schedule + discharge-plan sub-routes) ──
+        - id: smartportx-vessel
+          uri: ${GATEWAY_URI_SMARTPORTX_VESSEL:lb://smartportx-vessel}
+          predicates:
+            - Path=/api/v1/vessels/**,/api/v1/schedules/**,/api/v1/discharge-plans/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-vessel
                 fallbackUri: forward:/fallback/vessel
 
         # ── Integration Service ──
         - id: smartportx-integration
-          uri: lb://smartportx-integration
+          uri: ${GATEWAY_URI_SMARTPORTX_INTEGRATION:lb://smartportx-integration}
           predicates:
             - Path=/api/v1/integration/**
           filters:
-            - StripPrefix=2
             - name: CircuitBreaker
               args:
-                name: integration-service
+                name: gateway-integration
                 fallbackUri: forward:/fallback/integration
 
         # ── Notification Service ──
         - id: smartportx-notification
-          uri: lb://smartportx-notification
+          uri: ${GATEWAY_URI_SMARTPORTX_NOTIFICATION:lb://smartportx-notification}
           predicates:
             - Path=/api/v1/notifications/**
           filters:
-            - StripPrefix=2
             - name: CircuitBreaker
               args:
-                name: notification-service
+                name: gateway-notification
                 fallbackUri: forward:/fallback/notification
 
-        # ── WebSocket Route ──
+        # ── WebSocket Route (exempt from edge JWT; STOMP handshake authorizes) ──
         - id: smartportx-notification-ws
-          uri: lb:ws://smartportx-notification
+          uri: ${GATEWAY_URI_SMARTPORTX_NOTIFICATION_WS:lb:ws://smartportx-notification}
           predicates:
             - Path=/ws/**
 ```
 
 ### 7.2 Route Authorization
 
-Routes are protected at the Gateway level based on role:
+Routes are protected at the Gateway level based on role. The edge `JwtEdgeFilter`
+validates an RS256 JWT (via the identity service's `/api/v1/auth/jwks`, falling back to
+the `jwk-set-uri` from config), strips any client-supplied `X-User-Id`/`X-User-Role`, and
+injects trusted values from the token's `sub` and first `roles` claim. Matches against
+`public-routes` (exact) skip JWT; everything else requires a valid token; then the request
+path is matched against `role-routes` for RBAC (403 on role mismatch). WebSocket `/ws/**`
+is exempt from this filter — the STOMP CONNECT frame authorizes via JWT.
 
 ```yaml
 smartportx:
   gateway:
     authorization:
       public-routes:
-        - /api/v1/identity/auth/**
-        - /api/v1/identity/health
+        - /api/v1/auth/login
+        - /api/v1/auth/refresh
+        - /api/v1/auth/jwks
         - /actuator/health
         - /actuator/info
       role-routes:
-        - path: /api/v1/yard/**
+        - path: /api/v1/yard
           roles: [ADMIN, TERMINAL_OP, YARD_MANAGER, READONLY]
-        - path: /api/v1/gate/**
+        - path: /api/v1/gate
           roles: [ADMIN, TERMINAL_OP, GATE_OPERATOR, READONLY]
-        - path: /api/v1/containers/**
+        - path: /api/v1/appointments
+          roles: [ADMIN, TERMINAL_OP, GATE_OPERATOR, READONLY]
+        - path: /api/v1/quotas
+          roles: [ADMIN, TERMINAL_OP, GATE_OPERATOR, READONLY]
+        - path: /api/v1/containers
           roles: [ADMIN, TERMINAL_OP, YARD_MANAGER, GATE_OPERATOR, READONLY]
-        - path: /api/v1/vessels/**
+        - path: /api/v1/vessels
           roles: [ADMIN, TERMINAL_OP, READONLY]
-        - path: /api/v1/integration/**
+        - path: /api/v1/schedules
+          roles: [ADMIN, TERMINAL_OP, READONLY]
+        - path: /api/v1/discharge-plans
+          roles: [ADMIN, TERMINAL_OP, READONLY]
+        - path: /api/v1/integration
           roles: [ADMIN]
-        - path: /api/v1/notifications/**
+        - path: /api/v1/notifications
           roles: [ADMIN, TERMINAL_OP, YARD_MANAGER, GATE_OPERATOR, READONLY]
+        - path: /api/v1/users
+          roles: [ADMIN]
 ```
 
 ### 7.3 Gateway Headers
 
 The Gateway adds the following headers to all forwarded requests:
 
-| Header              | Source                    | Description                     |
-|---------------------|---------------------------|---------------------------------|
-| `X-User-Id`         | JWT `sub` claim           | Authenticated user ID           |
-| `X-User-Role`       | JWT `role` claim          | User's assigned role            |
-| `X-Correlation-Id`  | Generated or forwarded    | Request trace ID                |
-| `X-Forwarded-For`   | Original request          | Client IP address               |
-| `X-Request-Timestamp` | Gateway                  | Request received timestamp      |
-| `X-API-Key`         | Request header            | API key for rate limiting       |
+| Header              | Source                    | Description                                    |
+|---------------------|---------------------------|------------------------------------------------|
+| `X-User-Id`         | JWT `sub` claim           | Authenticated user ID (injected; any client-supplied value is stripped) |
+| `X-User-Role`       | JWT first `roles` claim   | User's assigned role (injected; client-supplied value is stripped) |
+| `X-Correlation-Id`  | Generated or forwarded    | Request trace ID, echoed on the response header |
+
+Notes:
+- `X-Forwarded-For` is appended automatically by Spring Cloud Gateway (reactor
+  Netty). It is **never trusted** for identity or rate-limiting decisions: the rate
+  limiter keys on `routeId|user:<X-User-Id>` when an authenticated user is present,
+  otherwise on `routeId|ip:<client-address>` from the inbound connection — never on
+  a forwarded header value.
+- `X-Request-Timestamp` and `X-API-Key` are **not implemented** in the current gateway;
+  these rows were removed from the contract. There is no API-key authentication at the
+  edge (authentication is JWT-based via `public-routes` + `role-routes`).
 
 ---
 

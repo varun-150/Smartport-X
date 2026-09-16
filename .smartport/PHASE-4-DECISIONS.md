@@ -294,9 +294,108 @@
   is nil; unify at M12 hardening if a cross-service consumer appears.
 - **Status:** ACCEPTED (2026-08-31, M5 close-out).
 
+## D-446 — Gate wire identifiers, superset gate schema, and BOTH-quota semantics (M6)
+- **Context:** API-CONTRACTS §6 returns prefixed ids (`apt-<uuid>`, `txn-<uuid>`, `quota-<uuid>`) yet accepts
+  plain UUIDs for some path parameters; the M6 gate slice must reconcile both on one codec. The gate DDL
+  carries columns beyond DATA-ARCHITECTURE §8.1-8.4 (lane assignment and rework data) that API-CONTRACTS
+  §6.1/§6.2/§6.3 requires. `BOTH` appointments must reserve exactly one quota bucket without double-booking.
+- **Decision:** (1) Identify with a single codec `GateIds` — responses always render prefixed ids
+  (`apt-`/`txn-`/`quota-`), paths accept the prefixed form or the bare UUID, malformed → 400
+  `malformed_request` with a prefix-aware message. (2) Gate schema is a documented, forward-compatible
+  **superset** of DATA-ARCHITECTURE §8.1-8.4: appointments.gate_lane (assigned at booking), appointments.
+  special_requirements (JSONB: hazmatCertified/reeferConnection/doubleStack), gate_transactions.gate_lane,
+  appointment_quotas.gate_lane (DEFAULT 'ALL') and appointment_quotas.adjustment_reason (audit); the
+  DATA-ARCHITECTURE tables remain the canonical base. (3) `BOTH` occupies the outbound (return-leg) quota:
+  `AppointmentType.quotaType()` maps BOTH → DROP_OFF, so a double-leg trip reserves one DROP_OFF slot and
+  never a separate PICKUP slot. (4) Direction semantics: GateType INBOUND = drop-off, OUTBOUND = pickup.
+- **Consequences:** clients may send either id form; responses are always prefixed and stable. The superset
+  columns are nullable/defaulted so DATA-ARCHITECTURE readers are unaffected. BOTH-quota is conservative
+  (no inbound+outbound double booking) and matches the API-CONTRACTS §6.2 model. GateRules centralizes the
+  cross-service rule set (doc requirements, PICKUPABLE container states, gate direction mapping).
+- **Status:** ACCEPTED (2026-08-31, M6 close-out).
+
+## D-447 — Vessel superset schema + vocabulary reconciliation (M7)
+- **Context:** DATA-ARCHITECTURE §9 and API-CONTRACTS §7 describe the vessel registry, schedule, and
+  discharge-plan surfaces with divergent vocabulary (vessel_type, priority, schedule status, container
+  status, and a numerical column-type mismatch). F-423 enumerates the deltas. Only one schema can be
+  built and validated (`ddl-auto: validate`).
+- **Decision:** (1) The vessel DDL is a documented, forward-compatible **superset** of DATA-ARCHITECTURE
+  §9.1–9.4 merged with API-CONTRACTS §7 columns: vessels add gross_tonnage/flag/operator/call_sign;
+  vessel_schedules add voyage_number/priority/port_of_call/next_port/estimated_teus/actual_teus;
+  discharge_plans add voyage_number; discharge_containers add yard_target/priority/actual_yard_position/
+  equipment_id/operator. (2) Vocabulary reconciliation — canonical values win where aliases collide:
+  vessel_type AC enum `CONTAINER|BULK|TANKER|GENERAL|ROLL_ON_ROLL_OFF` (DA "RO-RO" → ROLL_ON_ROLL_OFF);
+  priority `HIGH|MEDIUM|LOW`, default MEDIUM (`NORMAL` accepted as MEDIUM alias); plan status
+  `PLANNED|IN_PROGRESS|COMPLETED` (DA DRAFT/APPROVED collapsed); discharge container status
+  `PLANNED|DISCHARGED|IN_TRANSIT|STACKED|MISROUTED` (DA DISCHARGING → IN_TRANSIT alias);
+  `OFF_VESSEL = {DISCHARGED, IN_TRANSIT, STACKED}`. (3) Vessel dimensions/gross_tonnage and container
+  weight are Java double/Double, so DDL columns are DOUBLE PRECISION (float8) — NOT NUMERIC — to satisfy
+  `ddl-auto: validate` (F-423). (4) Plan completes when every container is off-vessel (i.e. at the last
+  container's DISCHARGED step), matching the DA/AC completion semantic.
+- **Consequences:** superset columns are nullable/defaulted so DATA-ARCHITECTURE readers are unaffected.
+  Aliases are accepted on input and normalized to canonical values on output. Resolves the M7 part of
+  pending D-421 (vessel exact schema); the remaining D-421 scope is folded into this decision.
+- **Status:** ACCEPTED (2026-08-31, M7 close-out).
+
+## D-448 — Advisory best-effort cross-service propagation; fail-closed planning verification (M7)
+- **Context:** the discharge flow must notify the container service (changeStatus on DISCHARGED) and the
+  yard service (placeContainer on STACKED with a yard position). Resilience4j starter is not resolvable
+  in the offline local `.m2` (same constraint as the M6 WireMock finding), so no circuit-breaking starter
+  is available. Planning-time container verification must decide whether an unverifiable registry blocks
+  the plan.
+- **Decision:** (1) Cross-service propagation at DISCHARGED/IP (container status) and STACKED (yard
+  placement) is **advisory / best-effort**: log + swallow transport failures, fail-open — a terminal
+  update never rolls back because a downstream call failed. (2) Planning-time container verification is
+  **fail-closed**: `ContainerApiClient.findByContainerNumber` — 404 → Optional.empty → 422
+  `container_not_registered`; transport/5xx → `ContainerUnavailableException` → 422
+  `container_registry_unavailable`; a plan is never accepted without knowing its containers exist.
+  (3) Substitution: hand-rolled HTTP clients (`HttpContainerApiClient`, `HttpYardApiClient`) wired
+  `@ConditionalOnMissingBean` so tests inject `@MockitoBean` interfaces; documented as the offline
+  Resilience4j substitute (per F-419/`F-423` substitution pattern from M6).
+- **Consequences:** downstream outages do not corrupt a completed discharge, but the container/yard
+  services may be momentarily out of sync (reconciled by their own trusted state); planning is
+  conservative and refuses to plan unknown containers. Rollback-to-Resilience4j is deferred until a
+  resolvable starter exists (tracked alongside R-007).
+- **Status:** ACCEPTED (2026-08-31, M7 close-out).
+
+## D-449 - Integration endpoint surface: API-CONTRACTS \u00a78 canonical superset (M8)
+- **Context:** two authoritative sources define the integration REST surface. API-CONTRACTS \u00a78 is our canonical
+  contract and lists `POST /api/v1/integration/edifact/parse`, `iot/data`, and `customs/status`, plus
+  `GET/PUT customs/status`. INTEGRATION-ARCHITECTURE \u00a79 offers a descriptive superset
+  (`edifact/inbound`, `iot/ingest`, `customs/submit`, `customs/status/{containerNumber}`). They overlap but
+  disagree on paths and on whether customs status is read/write at the same URL.
+- **Decision:** implement the **API-CONTRACTS \u00a78 canonical surface as the shipped superset** and record the
+  divergence as a finding (F-425). This means `POST /api/v1/integration/edifact/parse`, `POST /api/v1/integration/
+  iot/data`, and a `customs` group (`POST /status` submit, `GET /status/{containerNumber}`, `POST
+  /status/{containerNumber}/review`, `POST /status/{containerNumber}/release`, `GET
+  /gate-out/{containerNumber}/validate`). The INTEGRATION-ARCHITECTURE \u00a79 spelling (`edifact/inbound` etc.) is
+  NOT exposed; INTEGRATION-ARCHITECTURE \u00a79 is amended/superseded by the API-CONTRACTS surface (D-447
+  superset-DDL pattern applied to the API surface). Authorization: write endpoints (`parse`, `iot/data`, customs
+  submit/review/release) require `ADMIN|TERMINAL_OP` or `integration:write`; read endpoints (`GET messages/{id}`,
+  customs status, gate-out validate) use `isAuthenticated()`.
+- **Consequences:** one definitive endpoint set for clients and contract tests; readers of INTEGRATION-ARCHITECTURE
+  \u00a79 must defer to API-CONTRACTS \u00a78. No behavioral gap: every documented operation has a mapped endpoint.
+- **Status:** ACCEPTED (M8 close-out).
+
+## D-450 - EDIFACT parser is a hand-rolled segment parser (offline StAEDI substitution) (M8)
+- **Context:** FR-011 requires parsing COPRAR/COPARN EDIFACT inbound interchanges. The natural library
+  `io.xlate:staedi` is NOT present in the local offline `.m2` (same constraint class as the M6 WireMock and
+  M7 Resilience4j findings), so it cannot be added without breaking the reactor build.
+- **Decision:** implement a **hand-rolled EDIFACT tokeniser + semantic mapper** (`EdifactTokeniser`,
+  `EdifactSegment`, `EdifactParser`) covering exactly the subset the platform consumes: UNB/UNH/UNT/UNZ
+  envelope validation, BGM (message number), NAD (carrier/country), TDT (vessel), LOC (port/terminal),
+  DTM (dates, UTC), EQD (containers), RFF. This is a documented **substitution**, not silent omission,
+  and is recorded under the established substitution pattern (D-008 jurisdiction, D-448 precedent). DTM
+  time/date composites resolve against UTC (format 203/204). Unsupported message types and missing
+  envelope segments produce RFC 9457 400s (`unsupported_message_type` / `validation_failed`).
+- **Consequences:** no external StAEDI dependency; the parser is deliberately a pragmatic subset and does not
+  claim full UN/EDIFACT compliance. Rollback-to-StAEDI is deferred and tracked alongside R-007.
+- **Status:** ACCEPTED (M8 close-out).
+
 -------------------------------------------------------------------------------
 ## PENDING / OPEN DECISIONS (surface before final gate)
 - D-420: Notification service persistence (depends F-407 §11 read at M9).
-- D-421: Vessel service exact schema columns (depends F-408 §9 read at M7).
+- D-421: Vessel service exact schema columns — RESOLVED by D-447 (M7 superset DDL + vocabulary) and the
+  VesselSchemas DDL; folded into D-447.
 - D-422: Perf scenario thresholds finalization (depends NFR doc + M12.5 measurements).
 - D-423: ADR-001…013 ratification sweep (PROPOSED → ACCEPTED) — batched at M13 with reviewer sign-off.

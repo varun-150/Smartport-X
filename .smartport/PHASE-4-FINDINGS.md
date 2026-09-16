@@ -217,6 +217,96 @@
   null with a §4.2 note. Recorded now to keep the ledger honest at close-out.
 - **Status:** OPEN (2026-08-31, M5 close-out; fixed at M12.5).
 
+## F-422 — Unquoted `HH:mm` in application.yml resolves as a YAML 1.1 sexagesimal, not a string → LocalTime binding failure
+- **Observed:** M6 gate wrote `smartportx.gate.operating-hours-start: 06:00` (and `operating-hours-end:
+  22:00`) unquoted. Under YAML 1.1 (SnakeYAML), a scalar shaped `[-+]?[0-9][0-9_]*(:[0-5]?[0-9])+` is
+  resolved as a SEXAGESIMAL integer — `06:00` → `360`, `22:00` → `1320`, never a String. Spring Boot's
+  `@ConfigurationProperties` binder then failed: `ConfigurationPropertiesBindException` →
+  `BindException` under `smartportx.gate.operating-hours-end` → `ConverterNotFoundException: No converter
+  found capable of converting from type [java.lang.Integer] to type [java.time.LocalTime]`, aborting the
+  Spring context during test wiring (every gate integration suite failed identically, hiding the real
+  cause). GateProperties binds `LocalTime operatingHoursStart/End` (defaults overridden from yml).
+- **Impact:** startup/context failure for a quoting mismatch — the exception points at a missing LocalTime
+  converter, not at the YAML scalar, costing a full debugging cycle. AFFECTS EVERY SERVICE with `HH:mm` (or
+  `mm:ss`) time/duration literals in configuration: vessel berth windows, integration shifts, notification
+  schedules at M7–M9 are the same trap.
+- **Resolution:** quote the literals (`"06:00"`, `"22:00"`) → bound as String → converted to LocalTime,
+  context loads. Recorded now; M7–M9 config sweeps must quote every time literal proactively and tests
+  should assert the service context loads before business tests (the gate suites now do).
+- **Status:** OPEN (2026-08-31, M6 close-out; remediated for gate by quoting; audit remaining services
+  when their application.yml gains LocalTime/time-literal properties).
+
+## F-423 — Vessel m7 DATA-ARCHITECTURE §9 vs API-CONTRACTS §7 deltas (data/vocabulary + numeric types)
+- **Observed:** building the `smartportx_vessel` V1 DDL surfaced a full set of authoring divergences between
+  the two canonical sources. DATA-ARCHITECTURE §9.1–9.4 omits columns API-CONTRACTS §7 requires and uses
+  different vocabulary; API-CONTRACTS §7 omits some DA columns; and both document vessel dimensions/weights
+  numerically while the JPA entities map Java double/Double.
+- **Impact:** (a) one schema cannot satisfy both as-written; (b) `ddl-auto: validate` fails when the DDL
+  declares NUMERIC but Hibernate maps to float8 (DOUBLE PRECISION) — the live failure was
+  `Schema-validation: wrong column type encountered in column [weight_kg] … found [numeric (Types#NUMERIC)],
+  but expecting [float(53) (Types#FLOAT)]`; the same NUMERIC-typed columns exist on `vessels` (length_m,
+  beam_m, draft_m, gross_tonnage).
+- **Deltas recorded:** vessel_type DA "RO-RO" → canonical `ROLL_ON_ROLL_OFF`; priority DA "NORMAL" →
+  canonical `MEDIUM`; plan status DA DRAFT/APPROVED → collapsed `PLANNED|IN_PROGRESS|COMPLETED`; container
+  status DA DISCHARGING → alias of `IN_TRANSIT`; vessel_schedules/discharge_plans/discharge_containers
+  superset columns (voyage_number, port_of_call/next_port, estimated_teus/actual_teus, gross_tonnage/flag/
+  operator/call_sign, yard_target/priority/actual_yard_position/equipment_id/operator).
+- **Resolution:** resolved by D-447 — a documented forward-compatible superset DDL with canonical
+  vocabulary, DOUBLE PRECISION for the double/Double-mapped numeric columns, and completion semantics when
+  all containers are off-vessel. Resolution/status:
+- **Status:** CLOSED (2026-08-31, M7 close-out) — resolved by D-447; superset DDL + vocabulary ships in
+  `smartportx_vessel` V1.
+
+## F-424 — Vessel/yard/container offline client substitution (Resilience4j starter not in local .m2)
+- **Observed:** the M7 discharge flow must call the container and yard services, but
+  `org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j` is not present in the local
+  offline `.m2`, and `mvn dependency:get` cannot fetch it. This is the same class of constraint as the M6
+  WireMock finding (F-419 substitution note).
+- **Impact:** Resilience4j `@CircuitBreaker`/`@TimeLimiter` annotations would fail to resolve; adding a
+  starter would break the reactor build.
+- **Resolution:** per D-448, propagate best-effort/advisory (log + swallow) for status/yard placement and
+  fail-closed for planning-time container verification, using hand-rolled HTTP clients
+  (`HttpContainerApiClient`, `HttpYardApiClient`) behind `ContainerApiClient`/`YardApiClient` interfaces,
+  wired `@ConditionalOnMissingBean` so tests inject `@MockitoBean` stubs. Provider-contract coverage uses an
+  in-process JDK `com.sun.net.httpserver.HttpServer` (mirrors the M6 gate substitution). This is a
+  documented substitution, not a silent omission; revisiting Resilience4j (tracked with R-007) remains open.
+- **Status:** CLOSED-as-substituted (2026-08-31, M7 close-out).
+
+## F-425 - Integration endpoint surface divergence: API-CONTRACTS \u00a78 vs INTEGRATION-ARCHITECTURE \u00a79 (M8)
+- **Observed:** API-CONTRACTS \u00a78 and INTEGRATION-ARCHITECTURE \u00a79 describe overlapping but differently-spelled
+  integration endpoints. API-CONTRACTS uses `edifact/parse`, `iot/data`, `customs/status`; INTEGRATION-ARCHITECTURE
+  uses `edifact/inbound`, `iot/ingest`, `customs/submit`, `customs/status/{containerNumber}`. They also disagree
+  on whether customs status is a single GET/PUT resource or split submit/review/release actions.
+- **Impact:** ambiguous contract for clients and provider-contract tests; a reader could not know which path
+  to call.
+- **Resolution:** resolved by D-449 - API-CONTRACTS \u00a78 is canonical and implemented as the shipped superset;
+  INTEGRATION-ARCHITECTURE \u00a79 is superseded for the REST surface. No operation is lost; every documented
+  operation maps to a shipped endpoint.
+- **Status:** CLOSED (M8 close-out) - resolved by D-449.
+
+## F-426 - Integration schema/env delta + inbound-bound contract surface (M8)
+- **Observed:** (1) The `smartportx_integration` schema exists but is **created externally** (it is empty and is
+  NOT created by Flyway - only tables are, and Flyway runs `V1__init.sql` into it on first use); this matches
+  the M1 init-databases convention but must be documented so a fresh checkout runs the init script first. (2)
+  The integration service is structural **inbound-bound** in this slice: it receives EDIFACT/IoT/customs feeds
+  and issues **no outbound partner HTTP calls**, so there are no outbound provider tunnels to contract-test.
+- **Impact:** (a) a developer who creates the schema must re-run the init-databases script or `CREATE SCHEMA`
+  manually; `ddl-auto: validate` fails if the schema is absent. (b) Provider-side contract coverage is therefore
+  REST-schema-level (parse response envelope + RFC 9457 error envelope), not outbound-tunnel-level as in
+  M6/M7; the inbound Rabbit/notification publish path is exercised via `@MockitoBean EventTransport` instead.
+- **Resolution:** documented here and in EVIDENCE E-030; DDL column/entity mismatch caught by `ddl-auto: validate`
+  (missing `edifact_messages.updated_at`) fixed in V1 and the test schema reset.
+- **Status:** CLOSED-as-documented (M8 close-out).
+
+## F-427 - EDIFACT parser library (StAEDI) not in offline .m2 (M8)
+- **Observed:** FR-011 needs an EDIFACT parser; `io.xlate:staedi` (the natural library) is NOT resolvable in the
+  local offline `.m2`, and `mvn dependency:get` cannot fetch it (same class of constraint as the M6 WireMock
+  finding and M7 F-424 Resilience4j finding).
+- **Impact:** a StAEDI dependency would fail the offline reactor build.
+- **Resolution:** per D-450, a hand-rolled tokeniser + semantic parser implements the consumed COPRAR/COPARN
+  subset; documented substitution, revisit tracked with R-007.
+- **Status:** CLOSED-as-substituted (M8 close-out).
+
 -------------------------------------------------------------------------------
 ## APPENDIX — HONEST-BASELINE
 As of 2026-08-27 (Phase 4 kickoff) the repository is documentation-only: no pom.xml, no source directories,

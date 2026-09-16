@@ -4,6 +4,126 @@ server:
 spring:
   application:
     name: smartportx-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 2000
+            response-timeout: 5s
+      routes:
+        - id: smartportx-identity-auth
+          uri: ${GATEWAY_URI_SMARTPORTX_IDENTITY:lb://smartportx-identity}
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-identity
+                fallbackUri: forward:/fallback/identity
+        - id: smartportx-identity-users
+          uri: ${GATEWAY_URI_SMARTPORTX_IDENTITY:lb://smartportx-identity}
+          predicates:
+            - Path=/api/v1/users/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-identity
+                fallbackUri: forward:/fallback/identity
+        - id: smartportx-container
+          uri: ${GATEWAY_URI_SMARTPORTX_CONTAINER:lb://smartportx-container}
+          predicates:
+            - Path=/api/v1/containers/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-container
+                fallbackUri: forward:/fallback/container
+        - id: smartportx-yard
+          uri: ${GATEWAY_URI_SMARTPORTX_YARD:lb://smartportx-yard}
+          predicates:
+            - Path=/api/v1/yard/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-yard
+                fallbackUri: forward:/fallback/yard
+        - id: smartportx-gate
+          uri: ${GATEWAY_URI_SMARTPORTX_GATE:lb://smartportx-gate}
+          predicates:
+            - Path=/api/v1/gate/**,/api/v1/appointments/**,/api/v1/quotas/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-gate
+                fallbackUri: forward:/fallback/gate
+        - id: smartportx-vessel
+          uri: ${GATEWAY_URI_SMARTPORTX_VESSEL:lb://smartportx-vessel}
+          predicates:
+            - Path=/api/v1/vessels/**,/api/v1/schedules/**,/api/v1/discharge-plans/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-vessel
+                fallbackUri: forward:/fallback/vessel
+        - id: smartportx-integration
+          uri: ${GATEWAY_URI_SMARTPORTX_INTEGRATION:lb://smartportx-integration}
+          predicates:
+            - Path=/api/v1/integration/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-integration
+                fallbackUri: forward:/fallback/integration
+        - id: smartportx-notification
+          uri: ${GATEWAY_URI_SMARTPORTX_NOTIFICATION:lb://smartportx-notification}
+          predicates:
+            - Path=/api/v1/notifications/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-notification
+                fallbackUri: forward:/fallback/notification
+        - id: smartportx-notification-ws
+          uri: ${GATEWAY_URI_SMARTPORTX_NOTIFICATION_WS:lb:ws://smartportx-notification}
+          predicates:
+            - Path=/ws/**
+
+smartportx:
+  gateway:
+    authorization:
+      public-routes:
+        - /api/v1/auth/login
+        - /api/v1/auth/refresh
+        - /api/v1/auth/jwks
+        - /actuator/health
+        - /actuator/info
+      role-routes:
+        - path: /api/v1/yard
+          roles: [ADMIN, TERMINAL_OP, YARD_MANAGER, READONLY]
+        - path: /api/v1/gate
+          roles: [ADMIN, TERMINAL_OP, GATE_OPERATOR, READONLY]
+        - path: /api/v1/appointments
+          roles: [ADMIN, TERMINAL_OP, GATE_OPERATOR, READONLY]
+        - path: /api/v1/quotas
+          roles: [ADMIN, TERMINAL_OP, GATE_OPERATOR, READONLY]
+        - path: /api/v1/containers
+          roles: [ADMIN, TERMINAL_OP, YARD_MANAGER, GATE_OPERATOR, READONLY]
+        - path: /api/v1/vessels
+          roles: [ADMIN, TERMINAL_OP, READONLY]
+        - path: /api/v1/schedules
+          roles: [ADMIN, TERMINAL_OP, READONLY]
+        - path: /api/v1/discharge-plans
+          roles: [ADMIN, TERMINAL_OP, READONLY]
+        - path: /api/v1/integration
+          roles: [ADMIN]
+        - path: /api/v1/notifications
+          roles: [ADMIN, TERMINAL_OP, YARD_MANAGER, GATE_OPERATOR, READONLY]
+        - path: /api/v1/users
+          roles: [ADMIN]
+    rate-limit:
+      capacity: 100
+      refill-per-minute: 60
 
 eureka:
   client:
@@ -17,3 +137,9 @@ management:
     web:
       exposure:
         include: health,info,metrics
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}

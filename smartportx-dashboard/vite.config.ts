@@ -1,20 +1,23 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-const apiTarget = process.env.VITE_API_TARGET ?? 'http://localhost:8080';
-
+// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
     proxy: {
-      '/api': { target: apiTarget, changeOrigin: true },
-      '/ws': { target: apiTarget, ws: true },
+      // Everything REST goes through the Spring Cloud Gateway edge (port 8080).
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      // STOMP over SockJS is also proxied through the gateway /ws/** route.
+      '/ws': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: ['./src/test/setup.ts'],
-  },
-});
+})

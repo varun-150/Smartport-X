@@ -240,8 +240,7 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       SERVICE_PORT: 8080
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
-      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:86400}
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
     depends_on:
       eureka:
         condition: service_healthy
@@ -1012,8 +1011,21 @@ target/
 | `RABBITMQ_USERNAME` | `${RABBITMQ_USERNAME}` | RabbitMQ username |
 | `RABBITMQ_PASSWORD` | `${RABBITMQ_PASSWORD}` | RabbitMQ password |
 | `EUREKA_CLIENT_SERVICEURL_DEFAULTZONE` | `http://eureka:8761/eureka` | Eureka server URL |
-| `JWT_SECRET` | (required) | JWT signing secret |
-| `JWT_EXPIRATION` | `86400` | JWT token expiry (seconds) |
+| `JWT_SECRET` | (required) | JWT signing secret (identity **only** — gateway DOES NOT hold it) |
+| `JWT_EXPIRATION` | `86400` | JWT token expiry in seconds (identity only) |
+
+**Gateway / Eureka Specific:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `IDENTITY_JWKS_URI` | `http://identity:8081/api/v1/auth/jwks` | Gateway JWT validation key source (RS256); replaces any `JWT_SECRET`-based validation |
+| `SMARTPORTX_EUREKA_SECURITY_USERNAME` | `admin` | Eureka dashboard basic-auth username (eureka server only) |
+| `SMARTPORTX_EUREKA_SECURITY_PASSWORD` | `admin` | Eureka dashboard basic-auth password (eureka server only; `{noop}` dev encoder) |
+
+> **Note:** the gateway validates incoming JWTs via JWKS (`IDENTITY_JWKS_URI`),
+> so it is never configured with the signing secret. Eureka clients (all other
+> services) register via `/eureka/**`, which is `permitAll` on the eureka server —
+> they do **not** need `SMARTPORTX_EUREKA_SECURITY_*` credentials to register.
 
 **Integration Service Specific:**
 
@@ -1064,9 +1076,16 @@ DB_PASSWORD=change_me_in_production
 RABBITMQ_USERNAME=guest
 RABBITMQ_PASSWORD=change_me_in_production
 
-# JWT
+# JWT (identity service only — signs RS256 tokens; gateway validates via JWKS)
 JWT_SECRET=change_me_to_a_long_random_string_at_least_32_chars
 JWT_EXPIRATION=86400
+
+# Gateway
+IDENTITY_JWKS_URI=http://identity:8081/api/v1/auth/jwks
+
+# Eureka dashboard basic-auth (eureka service only)
+SMARTPORTX_EUREKA_SECURITY_USERNAME=admin
+SMARTPORTX_EUREKA_SECURITY_PASSWORD=admin
 
 # Integration
 IOT_MODE=simulation

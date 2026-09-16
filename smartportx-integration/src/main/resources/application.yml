@@ -6,6 +6,38 @@ spring:
     name: integration
   jackson:
     default-property-inclusion: non_null
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/smartportx?currentSchema=smartportx_integration}
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTITY_JWKS_URI:http://localhost:8081/api/v1/auth/jwks}
+
+smartportx:
+  integration:
+    source: smartportx-integration
+    iot:
+      enabled: ${IOT_SIM_ENABLED:false}
+      interval-ms: 15000
+      max-reading-age-minutes: 60
+      temperature-warning-celsius: 35.0
+      temperature-critical-celsius: 40.0
+      shock-warning-g: 10.0
+      shock-critical-g: 20.0
+      low-battery-pct: 15
+  events:
+    publish-to-rabbitmq: ${EVENTS_PUBLISH_TO_RABBITMQ:false}
+    exchange: ${EVENTS_EXCHANGE:smartportx.domain-events}
 
 eureka:
   client:

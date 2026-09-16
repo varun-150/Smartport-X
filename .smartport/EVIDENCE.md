@@ -340,3 +340,296 @@ Each entry:
 - **Evidence:** main sources under smartportx-yard/src/main/java (web/service/domain/repository/event);
   V1__init.sql (superset DDL + B01/RTG-01 seed); 5 integration suites under smartportx-yard/src/test;
   mvn output (Tests run: 37 … BUILD SUCCESS; jar repackaged).
+
+## E-028: M6 — gate appointments, quotas, queue, check-in/out, events, provider tunnels, RBAC (FR-005/FR-007)
+- **Requirement:** M6 per PHASE-4-IMPLEMENTATION-PLAN — appointment booking with quota windows + dynamic
+  adjustment (FR-005), check-in/check-out with document/seal/weight rules + EIR issuance (FR-007), plus the
+  FR-003.6 real-time queue, FR-003.7 dual-transaction and FR-003.8 status surfaces; decisions D-446.
+- **Implementation:** Flyway V1 superset DDL on schema `smartportx_gate` (D-446: appointments.gate_lane +
+  special_requirements JSONB, gate_transactions.gate_lane, appointment_quotas.gate_lane DEFAULT 'ALL' +
+  adjustment_reason; canonical base DATA-ARCHITECTURE §8.1-8.4; UTC instants; indexes on time_slot/status/
+  type). Domain: AppointmentStatus PENDING|CONFIRMED|CHECKED_IN|IN_PROGRESS|COMPLETED|CANCELLED|NO_SHOW
+  (isActive/isModifiable), AppointmentType PICKUP|DROP_OFF|BOTH with BOTH reserving the outbound return-leg
+  quota via `quotaType()`, GateType INBOUND|OUTBOUND, GateLane, GateTransaction PICKUP|DROP_OFF, GateRules
+  (operating window 06:00–22:00, 15-min check-in window, 120-min late grace → lazy NO_SHOW, doc requirements
+  PICKUP=B/L+DO, DROP_OFF=DO, PICKUPABLE_CONTAINER_STATES REGISTERED|AT_GATE|IN_YARD|DISCHARGED|AT_GATE_OUT).
+  Services: AppointmentBookingService (≥2h lead, ≤14-day horizon, hourly quota rows materialized lazily,
+  reserve → default 25-slot window, cancel/re-book same window, estimate preview with bookingEstimateFee,
+  null-safe durationMinutes); GateProcessingService (lane load-balanced check-in, customs HELD + PICKUPABLE
+  container state + yard position-assigned checks, seal number required at PICKUP check-in (422
+  `seal_required`), swing-weight 2500 kg for DROP_OFF (422 `swing_weight_exceeded`), late-within-grace
+  auto-reschedule search + emissions, beyond-grace NO_SHOW, broken-seal re-seal at check-out (422
+  `seal_broken_unauthorized`)); GateQueueService (per-transaction snapshot + publish + on-demand view with
+  lane currentQueue + estimated clearance); QuotaService (capacity arithmetic, reservation freeze, cap
+  adjustment guard → 422 `invalid_quota_cap`, adjustment audit). Events: gate `EventTransport` mirroring
+  M4/M5 (Log/Rabbit mutually-exclusive `@ConditionalOnProperty` beans, `smartportx-gate` source), typed
+  record payloads in GateDomainEvents, vocabulary `gate.AppointmentBooked|AppointmentConfirmed|
+  AppointmentCancelled|AppointmentRescheduled|GateCheckIn|GateQueueUpdated|GateCheckOut`. Web:
+  AppointmentController / CheckInOutController / QueueController / QuotaController + DTO records,
+  GateSecurityExceptionHandler mapping method-security denial → 403 `access_denied` (codebase convention).
+  Support: GateIds codec (`apt-`/`txn-`/`quota-` prefixed on responses, prefixed-or-bare UUIDs in paths,
+  400 `malformed_request`), GateClock, SequenceNumbers (`APT-YYYYMMDD-NNNN` booking date; `EIR-YYYYMMDD-NNNN`
+  check-out date, UTC-day suffixed), HttpClients (connect/read timeouts + default `Accept: application/json`).
+  Tunnels (fail-closed, `Optional.empty` on network/non-2xx): HttpContainerClient (ContainerInfo record),
+  HttpYardClient (404 → released false), HttpCustomsClient (status uppercased, null → PENDING, HELD blocks).
+  Security: shared stateless JWT chain; role guards per API-CONTRACTS §6 — booking/check-in/check-out/quota
+  GET require GATE_OPERATOR|GATE_SUPERVISOR|ADMIN|TERMINAL_OP, quota adjust GATE_SUPERVISOR|ADMIN,
+  unauthenticated → 401, denied → 403 `access_denied` (identity/container/yard-consistent).
+- **Test:** `mvn -B -pl smartportx-gate -am verify` — **63/63 PASS**: AppointmentIntegrationTest 17,
+  CheckInOutIntegrationTest 25, GateQueueQuotaIntegrationTest 7, GateProviderClientsContractTest 14; plus
+  smartportx-common 17/17; reactor BUILD SUCCESS (gate jar repackaged). Integration suites assert the
+  role matrix (401/403 `access_denied`), window/lead/horizon 422, reserve → availableSlots decrement + lazy
+  day-row materialization, capacity adjust + `invalid_quota_cap` + audit trail, BOTH blocking pickup until
+  drop-off completes, lane balancing GATE-01/GATE-02, cancel + re-book same slot, late-within-grace
+  auto-reschedule with `rescheduleAvailable` + rescheduled event, beyond-grace NO_SHOW, confirmation/EIR
+  number shape, and `gate.*` event envelopes via `@MockitoBean EventTransport` — the assertion helper reads
+  `Mockito.mockingDetails(transport).getInvocations()` because repeated `verify(atMost(n)).publish(captor)`
+  observes zero invocations after the first pass. Provider contract suite uses real HTTP over an in-process
+  JDK `com.sun.net.httpserver.HttpServer` stub (WireMock-jre8 is not resolvable offline — `mvn dependency:get`
+  fails; zero new dependencies) verifying URI shapes, `Accept: application/json`, decode contracts, and
+  fail-closed semantics on 404/5xx/connection-refused. Postgres-backed shared `smartportx_gate` schema,
+  per-suite `@Transactional`, real repositories.
+- **Result:** PASS (FR-005/FR-007 under the M6 slice-numbering note F-419; FR-003.6/FR-003.7/FR-003.8
+  surfaces delivered; D-446 recorded; F-422 recorded non-blocking; SC-10 CI-green on GitHub Actions +
+  R-007 live RabbitMQ verify still OPEN — local machine cannot execute Actions).
+- **Review:** Lead/Orchestrator + Implementer; the suite caught two production defects — GateIds.toUuid
+  misparsed hyphenated bare UUIDs as prefixed (fixed to prefix `regionMatches` + whole-string UUID parse,
+  400 `malformed_request`) and `AppointmentBookingService.book` unboxed a null `durationMinutes` → 500
+  (fixed to null-aware default 30). Config hazard unquoted `06:00`/`22:00` → YAML 1.1 sexagesimal binder
+  failure recorded as F-422. Security convention aligned with identity/container/yard (`access_denied`).
+- **Evidence:** 45 main files under smartportx-gate/src/main/java (web 8, service 14, domain 9, event 4,
+  repository 4, config 2, support 2, security 1, GateApplication 1); V1__init.sql; 4 suites under
+  smartportx-gate/src/test; mvn output (Tests run: 63 … BUILD SUCCESS; jar repackaged; reactor BUILD SUCCESS).
+
+## E-029: M7 — vessel registry, schedules, discharge plans, events, cross-service clients, RBAC (FR-004.1/4.2/4.3)
+- **Requirement:** M7 per PHASE-4-IMPLEMENTATION-PLAN — vessel registry (FR-004.1), vessel schedule
+  lifecycle (FR-004.2), discharge planning + progress (FR-004.3), plus the internal slice FR-010; decisions
+  D-447 (schema/vocabulary superset reconciliation) and D-448 (advisory best-effort cross-service
+  propagation, fail-closed planning-time container verification). F-423 records the DATA-ARCHITECTURE vs
+  API-CONTRACTS deltas behind the superset DDL.
+- **Implementation:** Flyway V1 superset DDL on schema `smartportx_vessel` (D-447: vessels length_m/beam_m/
+  draft_m/gross_tonnage as DOUBLE PRECISION aligned to entity double/Double mapping — F-423; vessel_schedules
+  voyage_number/priority/port_of_call/next_port/estimated_teus/actual_teus; discharge_plans.voyage_number;
+  discharge_containers weight_kg DOUBLE PRECISION + yard_target/priority/actual_yard_position/equipment_id/
+  operator; canonical base DATA-ARCHITECTURE §9.1–9.4; UTC instants; seed of 2 fixed-id vessels + 1 departed
+  schedule for E2E reference). Domain/enums: VesselType CONTAINER|BULK|TANKER|GENERAL|ROLL_ON_ROLL_OFF,
+  VesselScheduleStatus SCHEDULED|IN_TRANSIT|ARRIVED|WORKING|DEPARTED|CANCELLED (ACTIVE/IN_PORT sets, DA
+  aliases), SchedulePriority HIGH|MEDIUM|LOW default MEDIUM (DA "NORMAL" alias), DischargePlanStatus
+  PLANNED|IN_PROGRESS|COMPLETED, DischargeContainerStatus PLANNED|DISCHARGED|IN_TRANSIT|STACKED|MISROUTED
+  (OFF_VESSEL = {DISCHARGED, IN_TRANSIT, STACKED}, DA DISCHARGING ≡ IN_TRANSIT alias). Services:
+  VesselService (register/list/get/update/delete, duplicate IMO 409 `already_registered`), VesselScheduleService
+  (add/status-transition `SCHEDULED→IN_TRANSIT→ARRIVED→WORKING→DEPARTED`, CANCELLED from SCHEDULED/IN_TRANSIT,
+  terminal unmodifiable, ARRIVED/DEPARTED publish `vessel.VesselArrived|VesselDeparted`, in-port view,
+  etd-before-eta 422 `invalid_schedule`), DischargeService (plan create with planning-time container
+  verification via ContainerApiClient — 404→422 `container_not_registered`, transport/5xx→422
+  `container_registry_unavailable` (fail-closed); progress PLANNED→DISCHARGED→IN_TRANSIT→{STACKED|MISROUTED}
+  with `invalid_transition` 409 guard; on DISCHARGED best-effort `containerClient.changeStatus`; on STACKED
+  with yard position `yardClient.placeContainer` (block-bay-row-tier split); plan COMPLETED when all
+  containers off-vessel; `vessel.DischargeProgressUpdated`). Events: vessel `EventTransport` mirroring
+  M4/M5/M6 (Log/Rabbit mutually-exclusive `@ConditionalOnProperty` beans, `smartportx-vessel` source), typed
+  record payloads in VesselDomainEvents, vocabulary `vessel.VesselArrived|VesselDeparted|DischargePlanCreated|
+  DischargeProgressUpdated`. Web: VesselController (/api/v1/vessels, /{id}/schedules, /schedules/{id}/status,
+  /schedules/in-port, /{id}/discharge-plans, /discharge-plans/{id} and /progress) + DTO records +
+  ListResponse, VesselSecurityExceptionHandler mapping method-security denial → 403 `access_denied`
+  (codebase convention). Support: VesselIds codec (`vsl-`/`sch-`/`dp-` prefixed on responses,
+  prefixed-or-bare UUIDs in paths), VesselClock, VesselEventLogger, HttpClients. Cross-service clients
+  (hand-rolled, since Resilience4j starter is not resolvable offline — D-448 substitution mirrors the gate
+  WireMock finding): HttpContainerApiClient (interface + ContainerInfo record +
+  ContainerUnavailableException; findByContainerNumber 404→Optional.empty, changeStatus PUT), HttpYardApiClient
+  (block/bay/row/tier traversal then place). Security: shared stateless JWT chain; writes/status/discharge
+  require ADMIN|TERMINAL_OP (+VESSEL_PLANNER for schedule-add and plan-create), reads ADMIN or
+  `vessel:read` permission, delete ADMIN; unauthenticated → 401, denied → 403 `access_denied`.
+- **Test:** `mvn -B -pl smartportx-vessel -am verify` → **22/22 PASS + 17/17 common → reactor BUILD SUCCESS**
+  (vessel jar repackaged). DischargeIntegrationTest 7, HttpContainerApiClientTest 3 (in-process JDK
+  `com.sun.net.httpserver.HttpServer` stub, mirrors gate provider-contract substitution), VesselRegistryIntegrationTest
+  12. Suites assert the role matrix (401/403 `access_denied`), duplicate-IMO 409, malformed-IMO 400,
+  schedule lifecycle transitions + ARRIVED/DEPARTED events + etd-before-eta 422, in-port list, discharge
+  plan create + `vessel.DischargePlanCreated`, RBAC, DISCHARGED→IN_TRANSIT→STACKED flow with
+  `yardClient.placeContainer` args + stacking-without-target skips yard, plan COMPLETED at 100% when all
+  containers off-vessel, invalid transition 409 `invalid_transition`, unknown container 404
+  `container_not_on_plan`, and `vessel.*` event envelopes via `@MockitoBean EventTransport`.
+- **Result:** PASS (FR-004.1/4.2/4.3 + internal FR-010 slice); D-447/D-448 recorded; F-423 recorded; SC-10
+  (GitHub Actions) + R-007 (live RabbitMQ) verify remain OPEN — not executable on this machine.
+- **Review:** Lead/Orchestrator + Implementer. Test authoring surfaced two interplay defects fixed in-test:
+  `verify(yardClient).placeContainer("A","01","02","03", any(UUID.class))` mixed raw + matcher args →
+  `InvalidUseOfMatchersException` (fixed with `eq(...)`) and `planCompletesWhenAllContainersDischarged`
+  over-drove every container through DISCHARGED→IN_TRANSIT→STACKED, but the plan correctly auto-completes
+  as soon as the last container is off-vessel (DISCHARGED), so the trailing IN_TRANSIT/STACKED steps hit
+  409 `plan_completed` (test revised to discharge-only, matching D-447 completion semantics). A production
+  DDL defect was also caught by `ddl-auto: validate`: V1 declared vessel dimensions/gross_tonnage/weight_kg
+  as NUMERIC while the entities map Java double/Double → Hibernate expects float8 (DOUBLE PRECISION);
+  corrected in V1 and the local `smartportx_vessel` schema reset so Flyway re-ran the clean baseline.
+- **Evidence:** 30+ main files under smartportx-vessel/src/main/java (web, service, service/http 2, domain,
+  domain/events, repository, config, security, event, support); V1__init.sql; 3 suites under
+  smartportx-vessel/src/test; mvn output (`Tests run: 22 … BUILD SUCCESS`; reactor BUILD SUCCESS).
+
+## E-030: M8 — integration: EDIFACT inbound, IoT sim + thresholds, customs sim + gate-out check (FR-011/12/13)
+- **Requirement:** M8 per PHASE-4-IMPLEMENTATION-PLAN — EDIFACT COPRAR/COPARN inbound (FR-011), IoT sensor
+  feed simulation + threshold alerts (FR-012), customs status simulation +
+  gate-out validation (FR-013); decisions D-449 (endpoint surface: API-CONTRACTS §8 canonical superset) and
+  D-450 (hand-rolled EDIFACT parser — offline StAEDI substitution). F-425 (endpoint divergence), F-426
+  (schema/inbound-bound contract surface) and F-427 (StAEDI offline) record the documented divergences.
+- **Implementation:** Flyway V1 DDL on schema `smartportx_integration` (4 tables — edifact_messages,
+  iot_readings, customs_status, integration_audit_log). Custom-content EdifactParser (UNB/UNH/UNT/UNZ
+  envelope validation, BGM message number, NAD carrier/country, TDT vessel, LOC port/terminal, DTM UTC
+  dates with format-203/204 handling, EQD containers, RFF); idempotency by (sender, receiver,
+  interchange_ref, message_ref); messages persisted + correlated parse → event. IoT ingest with
+  battery-level normalization and threshold evaluation → `IotThresholdAlert` event. Customs PENDING→
+  UNDER_REVIEW→CLEARED/HELD→RELEASED state machine + gate-out validation. `integration.*` typed events
+  (Log/Rabbit transports per `@ConditionalOnProperty`, M4 pattern); retry/DLQ + audit log; `@MockitoBean
+  EventTransport` in tests. Web: POST /api/v1/integration/edifact/parse (201), GET /messages/{id},
+  POST /api/v1/integration/iot/data, customs submit/review/release, GET customs/status/{containerNumber},
+  POST /gate-out/{containerNumber}/validate (D-449); write = ADMIN|TERMINAL_OP|integration:write, reads =
+  authenticated. RFC 9457 error envelope (type/title/status/detail + code/correlationId).
+- **Test:** `mvn -B -o -pl smartportx-integration -am verify` → **31/31 PASS + 17/17 common + full reactor
+  BUILD SUCCESS**. EdifactParserTest 7 (unit), EdifactIntegrationTest 8, IotIntegrationTest 6,
+  CustomsIntegrationTest 8, EdifactApiContractTest 2 (provider-side REST: parse envelope + RFC 9457 error
+  envelope — inbound-bound service, so contract coverage is REST-schema-level, F-426).
+- **Result:** PASS (FR-011/12/13 slice); D-449/D-450 recorded; F-425/426/427 recorded; EdifactController.parse
+  returns 201; SC-10 (GitHub Actions) + R-007 (live RabbitMQ) verify remain OPEN — not executable locally.
+- **Review:** Lead/Orchestrator + Implementer. Test authoring surfaced four interplay defects fixed in-test or
+  in-V1: (1) `ddl-auto: validate` caught `edifact_messages.updated_at` missing in V1 (added
+  `updated_at TIMESTAMP NOT NULL DEFAULT NOW()`); (2) DTO/204 — `carrierCountry` (NAD CO element index) then
+  `vesselName` (TDT index) parser/fixture misalignment fixed to member(6,0)/member(3,0); (3) `IotIntegrationTest`
+  `Map.of()` rejected null batteryLevel → replaced with HashMap build; (4) `EdifactController.parse` asserted
+  `isCreated()` (201) — endpoint switched from `ResponseEntity.ok` (200). RFC 9457 assertion keys updated to
+  type/title/status/detail/code. Envelope validation error message prefixed with reasons so
+  `contains("does not match requested messageType")` passes.
+- **Evidence:** 37 main files under smartportx-integration/src/main/java (web, service, parser, domain,
+  domain/events, repository, config, security, event, support); V1__init.sql (4 tables); 5 suites under
+  smartportx-integration/src/test (8 files); mvn output (`Tests run: 31 … BUILD SUCCESS`; reactor BUILD
+  SUCCESS).
+
+## E-031: M9 — notifications: STOMP push, JWT auth, Rabbit→STOMP bridge, alert engine, preferences REST (FR-014)
+- **Requirement:** M9 per PHASE-4-IMPLEMENTATION-PLAN — real-time notification push via STOMP WebSocket
+  with JWT channel authorization, RabbitMQ→STOMP event bridge, alert engine with deduplication and
+  severity/category routing, notification preferences REST (merge-patch PUT / GET), quiet hours, digest
+  frequency preference; topic authorization keyed to JWT roles × destination patterns.
+  F-407 (notification schema not confirmed in DATA-ARCHITECTURE §11 at M8 per PHASE-4-FINDINGS;
+  this slice defines the notification schema via Flyway V1 DDL + runtime defaults).
+- **Implementation:** `smartportx-notification` module (Java 25, Spring Boot 3.5.16 / Spring 6.2.19).
+  Flyway V1 DDL on schema `smartportx_notification` (notification_preferences, notification_history).
+  STOMP WebSocket endpoints `/ws` + `/ws/notifications` (SockJS) with `JwtStompChannelInterceptor`:
+  CONNECT authenticated via Bearer JWT (`Authorization`, `token`, or `access_token` header), SUBSCRIBE
+  authorized against `TopicAuthorizationService`; authorities derived from JWT `roles` (`ROLE_<role>`)
+  and `permissions` claims.
+  `TopicAuthorizationService` maps authorities to topic rules: `ROLE_ADMIN` always-allowed,
+  `/topic/yard-status`+`/topic/vessel-status`+`/topic/vessel/*`+`/topic/customs/*` = ROLE_TERMINAL_OP,
+  `/topic/yard-zone/*` = ROLE_YARD_MANAGER, `/topic/gate-status`+`/topic/gate-lane/*`+
+  `/topic/appointments/*` = ROLE_GATE_OPERATOR, `/topic/containers/*`+`/topic/dashboard/summary`+
+  `/topic/alerts`+`/topic/alerts/*` = ANY_AUTHENTICATED; no rule matches are denied (fail-closed).
+  RabbitMQ consumer (`smartportx.events.consume-from-rabbitmq=true`) receives domain events →
+  `NotificationEventRouter` (routes by eventType: `container.ContainerRegistered/StatusChanged/
+  Moved/Removed` → `/topic/containers/{containerNumber}`, `yard.YardPositionAssigned/Freed/
+  OptimizationRun/EquipmentStatusChanged` → `/topic/yard-status`+`/topic/yard-zone/{blockCode}`,
+  `gate.*` appointment + check-in/out + queue → `/topic/appointments|gate-lane|gate-status`,
+  `vessel.VesselArrived/Departed/Discharge*` → `/topic/vessel/*`, `integration.*` EDIFACT/IoT/
+  customs → matching topics, all → `/topic/dashboard/summary` for cross-service summaries) →
+  `AlertEngine` (code→severity/category mapping, deduplication by code+dedupeKey with configurable
+  dedupe-window) → `NotificationBroadcaster` (`SimpMessagingTemplate.convertAndSend` to
+  `NotificationPayload` wire format). `NotificationPreference` entity: email/SMS/webSocket/push
+  channel enables, emailAddress/smsNumber, category filters, quiet hours (start/end as LocalTime),
+  digest frequency (DAILY/WEEKLY); Jackson `@JsonAutoDetect(fieldVisibility=ANY, getterVisibility=ANY)`
+  for entity serialization. `@Transactional` merge-patch PUT (null fields = no-op) + GET endpoints at
+  `/api/v1/notifications/preferences`. Test profile (`application-test.yml`) disables RabbitMQ
+  (`consume-from-rabbitmq=false`, `RabbitAutoConfiguration` excluded), uses PostgreSQL test DB,
+  dedupe-window 5s. `NotificationTestSecurityConfig` supplies
+  `JwtDecoder` bean backed by `NotificationTestTokens` (RSA-256, 15-min TTL, random subject per token).
+- **Test:** `mvn -B -pl smartportx-notification verify` → **57/57 PASS + 17/17 common + reactor
+  BUILD SUCCESS**. AlertEngineTest 11 (dedup, routing, code map, escalation), NotificationEventRouterTest
+   13 (topic selection, message body, vessel arrival cross-service), StompWebSocketIntegrationTest 7
+   (connect+auth, subscribe+receive, yard-zone role gating, invalid token rejection, no-token rejection,
+   history recording, unauthorized-topic rejection), TopicAuthorizationServiceTest 17 (admin bypass,
+   role × topic positive/negative across TERMINAL_OP/YARD_MANAGER/GATE_OPERATOR/READONLY,
+   ANY_AUTHENTICATED destinations, unmatched/null/blank destination denied, null/empty/plain
+   authorities denied, wildcard single-segment), NotificationPreferenceControllerTest 9 (GET defaults,
+  PUT merge, GET-after-PUT merge, 401/403 checks, digest settings).
+- **Result:** PASS (FR-014 slice); F-407 — notification schema defined by Flyway V1 DDL
+  (`smartportx_notification`: notification_preferences, notification_history) and validated at startup
+  via `ddl-auto: validate`; full DATA-ARCHITECTURE §11 doc reconciliation not re-run in this slice;
+  preferences REST is self-service — GET/PUT any authenticated user,
+  scoped to own `jwt.sub` (no role split); STOMP topic access is role-gated via
+  `TopicAuthorizationService`; only GET/PUT are mapped (POST → 405 by Spring mapping);
+  scope note: digest *preference* (DAILY/WEEKLY) is stored and asserted, but scheduled digest dispatch
+  (aggregation + delivery job) is not implemented in this slice;
+  SC-10 (GitHub Actions) + R-007 (live RabbitMQ) verify remain OPEN — not executable locally.
+- **Review:** Lead/Orchestrator + Implementer. Test authoring surfaced three defects fixed in-code:
+  (1) `NotificationPayload` record missing `topic` field — wire format deserialization broke
+  StompWebSocketIntegrationTest (topic assertion null); added `topic` as first record component.
+  (2) `@JsonAutoDetect` on `NotificationPreference` only set `getterVisibility=ANY`; bean methods
+  named `emailEnabled()` (no `get` prefix) are not recognized as getters by Jackson, so REST body
+  serialized as `{}`; added `fieldVisibility=ANY`.
+  (3) `NotificationTestTokens.admin()` generates a random `subject` (UUID) per call; `getAfterPut`
+  test used two different tokens → PUT and GET hit different userIds → merge invisible; fixed by
+  reusing one token variable. STOMP connect relied on deprecated overload that silently discarded
+  headers (discovered from prior session); all three STOMP connect sites now use
+  `connectAsync(url, headers, connectHeaders, handler).get(5, SECONDS)`.
+- **Evidence:** 27 main files under smartportx-notification/src/main/java (domain, service, web,
+  web/dto, config, security); V1__init.sql (2 tables — notification_preferences,
+  notification_history); 5 test suites under smartportx-notification/src/test (7 files);
+  `NotificationPayload.java` with `topic` field; `NotificationPreference.java` with
+  `fieldVisibility=ANY`; surefire XML (tests=57, failures=0, errors=0, skipped=0); mvn output
+  (`Tests run: 57 … BUILD SUCCESS`; reactor BUILD SUCCESS).
+
+## E-032: M10 — discovery server (Eureka) + gateway edge (JWT auth, RBAC routing, correlation, rate-limit, resilience)
+- **Requirement:** M10 per PHASE-4-IMPLEMENTATION-PLAN — standalone discovery server
+  (`smartportx-eureka`) and the "gateway edge" slice (`smartportx-gateway`): (1) Eureka server with
+  basic-auth-protected dashboard while discovery registration `/eureka/**` and `actuator/health`
+  stay open for unauthenticated clients; (2) gateway routing — 10 routes whose predicates match
+  `application.yml` exactly (community truth), edge JWT authentication at the gateway (not per
+  service), role-based route authorization, trusted-header injection for downstream services,
+  correlation-ID echo, per-route rate limiting with RFC 9457 `429`, per-route CircuitBreaker with
+  `503`/`504` RFC 9457 fallback, and a `/ws/**` route exempt from rate limit + breaker.
+- **Implementation:** `smartportx-eureka` (Java 25, Spring Boot 3.5.16, Spring Cloud Netflix Eureka
+  Server 2025.0.3). `EurekaSecurityConfig` (stateless, CSRF off): `/eureka/**` and
+  `/actuator/health` (and `/actuator/info`) `permitAll`; dashboard authenticated via
+  `UserDetailsService` `eurekaUsers` backed by `EurekaSecurityProperties` (env prefix
+  `smartportx.eureka.security` → `SMARTPORTX_EUREKA_SECURITY_USERNAME/PASSWORD`, dev defaults
+  `admin`/`admin`, `{noop}` encoder). Discovery clients therefore register with unauthenticated
+  plain `http://eureka:8761/eureka`. New module-local `Dockerfile` (single-stage jar copy on
+  `eclipse-temurin:25-jre`, `curl` for healthcheck) — build context is the module dir so an
+  in-image reactor build is impossible; jared-boot builds remain M12 scope.
+  `smartportx-gateway` (WebMVC gateway, no smartportx-common dependency): `GatewayConfig` — RS256
+  `JwtDecoder` bound to `IDENTITY_JWKS_URI` (default `http://identity:8081/api/v1/auth/jwks`);
+  `EdgeJwtAuthFilter` (order −100) strips client-supplied `X-User-Id`/`X-User-Role`, enforces the
+  whitelist (`POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`,
+  `GET /api/v1/auth/jwks`, `/actuator/health`, `/actuator/info`), and injects trusted headers from
+  the JWT (`sub` → `X-User-Id`, `roles[0]` → `X-User-Role`), rejecting with `401 unauthorized` /
+  `403 forbidden` problem+json; `CorrelationWebFilter` (order −1000) echoes `X-Correlation-Id`;
+  `RateLimitGlobalFilter` (order 0, bucket4j) keys per-route on `routeId|user:<id>` else
+  `routeId|ip:<ip>`, returns `429 rate_limited` problem+json with `Retry-After`, `/ws/**` exempt;
+  per-route CircuitBreaker (`fallbackUri: forward:/fallback/{svc}` on all but `/ws/**`) with
+  timeouts under `spring.cloud.gateway.server.webflux.httpclient.*`
+  (connect-timeout 2000, response-timeout 5s); `FallbackController` returns `504 gateway_timeout`
+  when `GatewayProblems.isTimeout` else `503 service_unavailable`, upstream problem+json passes
+  through unchanged; `errorId` on 500 only. The `test` profile overrides `jwtDecoder` with a local
+  JWK-backed decoder (`GatewayTestSecurityConfig`) and disables Eureka client + discovery
+  (zero-infra; `spring.main.allow-bean-definition-overriding=true`).
+- **Test:** `mvn -B clean verify` at root → 11/11 reactor **BUILD SUCCESS** (2:01 min). Eureka:
+  `EurekaSecurityTest` **5/5** (dashboard requires basic auth, accepts valid credentials,
+  `/eureka/**` registration permitted, `/actuator/health` + `/actuator/info` permitted). Gateway:
+  `GatewayEdgeContractTest` **11/11** (public login/refresh bypass + reach upstream; authenticated
+  proxy with trusted `X-User-Id`/`X-User-Role`; spoofed client headers stripped + replaced; wrong
+  role → 403 `urn:smartportx:problems:forbidden`; READONLY denied on container route; missing +
+  malformed token → 401 `urn:smartportx:problems:unauthorized`; correlation ID echoed on headers
+  and in problem body + end-to-end correlation; TERMINAL_OP permitted; `/actuator/health` public),
+  `GatewayRateLimitTest` **1/1** (429 `urn:smartportx:problems:rate_limited` + `Retry-After`
+  header), `GatewayResilienceTest` **2/2** (upstream timeout → 504
+  `urn:smartportx:problems:gateway_timeout`; dead downstream trips breaker → 503
+  `urn:smartportx:problems:service_unavailable`). Plus common 17/17. Gateway 14/14, eureka 5/5.
+- **Result:** PASS (discovery + edge slice). Route/RBAC/correlation documentation reconciled to
+  `application.yml` (COMMUNICATION-ARCHITECTURE §7.1–7.3, DEPLOYMENT-ARCHITECTURE §5 env tables,
+  `.env.example`, docker-compose identity/gateway/eureka env). Eureka dashboard protected while
+  registration + health stay open for unauthenticated clients. Remaining open: SC-10 (GitHub
+  Actions `mvn -B clean verify` — CI needs the new eureka Dockerfile + identity first for e2e
+  docker-compose) and R-007 (live docker-compose `docker compose up` run of eureka/gateway with
+  identity) — neither executable locally in this workspace.
+- **Review:** Lead/Orchestrator + Implementer. Reconciliation edits kept the written route table,
+  whitelist, headers table, and env contract in lockstep with `application.yml`; `JWT_SECRET`/
+  `JWT_EXPIRATION` removed from gateway (runtime JWT validation is OIDC-style jwks only).
+  Zero-infra strategy reused from identity's test profile.
+- **Evidence:** `smartportx-eureka` main (config, security, `EurekaSecurityProperties`,
+  `Dockerfile`) + `EurekaSecurityTest` (5); `smartportx-gateway` main (config, filters, fallback,
+  problem mappers) + 3 test suites + `StubUpstreamServer` + `GatewayTestTokens` (14); surefire
+  XML (eureka tests=5, gateway tests=14, failures 0); mvn output truncated per-module
+  (`Tests run: 5` / `Tests run: 14` + reactor summary 11/11 `BUILD SUCCESS`).

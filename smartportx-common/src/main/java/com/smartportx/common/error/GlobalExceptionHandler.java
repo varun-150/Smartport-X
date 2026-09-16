@@ -32,6 +32,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ProblemDetail> handleApi(ApiException ex, HttpServletRequest request) {
         ProblemDetail pd = ApiProblems.create(ex.getStatus(), ex.getCode(), ex.getMessage());
+        if (ex.getProperties() != null) {
+            java.util.Map<String, Object> merged = new java.util.LinkedHashMap<>(pd.getProperties());
+            merged.putAll(ex.getProperties());
+            pd.setProperties(merged);
+        }
         return ResponseEntity.status(ex.getStatus()).body(ApiProblems.enrich(pd, request));
     }
 

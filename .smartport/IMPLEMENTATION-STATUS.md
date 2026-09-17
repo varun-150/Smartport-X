@@ -4,7 +4,8 @@
 > NOT STARTED / SCAFFOLDED / IN PROGRESS / IMPLEMENTED / TESTED / VERIFIED / BLOCKED.
 > Evidence IDs refer to EVIDENCE.md. Requirements reference the canonical counts:
 > 46 FR (REQUIREMENTS.md) / 16 NFR groups (NON-FUNCTIONAL-REQUIREMENTS.md) / 36 SR (SECURITY-REQUIREMENTS.md).
-> Last updated: 2026-08-31 (M8 integration verified; M7 vessel verified; M6 gate verified).
+> Last updated: 2026-09-17 (M1–M4 critical validation E-033; F-428 fixed). Rows below now carry their
+> milestone evidence (E-024–E-032); the earlier E-021 SCAFFOLDED rows are superseded.
 
 --------------------------------------------------------------------------------
 ## 1. SERVICE STATUS
@@ -12,15 +13,15 @@
 | Service | Dir | Port | DB schema | Impl | Unit | Integ | API/Contract | Sec | E2E | Critic | Evidence |
 |---------|-----|------|-----------|------|------|-------|--------------|-----|-----|--------|----------|
 | smartportx-common | smartportx-common | — | — | TESTED | TESTED | — | — | — | — | — | E-023 |
-| smartportx-identity | smartportx-identity | 8081 | smartportx_identity | SCAFFOLDED | — | — | — | — | — | — | E-021 |
-| smartportx-container | smartportx-container | 8084 | smartportx_container | SCAFFOLDED | — | — | — | — | — | — | E-021 |
-| smartportx-yard | smartportx-yard | 8082 | smartportx_yard | VERIFIED | — | 37 | — | — | — | — | E-027 |
+| smartportx-identity | smartportx-identity | 8081 | smartportx_identity | VERIFIED | — | — | — | — | E-033 | — | E-024, E-033 |
+| smartportx-container | smartportx-container | 8084 | smartportx_container | VERIFIED | — | — | — | — | E-033 | — | E-026, E-033 |
+| smartportx-yard | smartportx-yard | 8082 | smartportx_yard | VERIFIED | — | 37 | — | — | E-033 | — | E-027, E-033 |
 | smartportx-gate | smartportx-gate | 8083 | smartportx_gate | VERIFIED | — | 63 | — | — | — | — | E-028 |
-| smartportx-vessel | smartportx-vessel | 8085 | smartportx_vessel | VERIFIED | — | 22 | — | — | — | — | E-029 |
+| smartportx-vessel | smartportx-vessel | 8085 | smartportx_vessel | VERIFIED | — | 22 | — | — | E-033 | — | E-029, E-033 |
 | smartportx-integration | smartportx-integration | 8086 | smartportx_integration | VERIFIED | — | 31 | — | — | — | — | E-030 |
-| smartportx-notification | smartportx-notification | 8087 | smartportx_notification | SCAFFOLDED | — | — | — | — | — | — | E-021 |
-| smartportx-gateway | smartportx-gateway | 8080 | — | SCAFFOLDED | — | — | — | — | — | — | E-021 |
-| smartportx-eureka | smartportx-eureka | 8761 | — | SCAFFOLDED | — | — | — | — | — | — | E-021 |
+| smartportx-notification | smartportx-notification | 8087 | smartportx_notification | VERIFIED | — | — | — | — | — | — | E-031 |
+| smartportx-gateway | smartportx-gateway | 8080 | — | VERIFIED | — | — | — | — | E-033 | — | E-032, E-033 |
+| smartportx-eureka | smartportx-eureka | 8761 | — | VERIFIED | — | — | — | — | E-033 | — | E-032, E-033 |
 | smartportx-dashboard | smartportx-dashboard | 3000 | — | TESTED | TESTED | — | — | — | — | — | E-021 |
 
 ## 2. INFRASTRUCTURE

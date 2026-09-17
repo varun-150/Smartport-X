@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: integration
+    name: smartportx-integration
   jackson:
     default-property-inclusion: non_null
   datasource:

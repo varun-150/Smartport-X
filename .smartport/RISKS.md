@@ -67,3 +67,23 @@
 - **Mitigation:** vertical-slice milestone order (dependency-depth), out-of-scope list hard-sided
   (PHASE-4-IMPLEMENTATION-PLAN §1), architect/critic veto on any FR-adjacent gold-plating, honest
   BLOCKED/IN PROGRESS statuses, stop-at-M13.
+
+## R-011: Ephemeral JWT signing key (new, M4 validation — F-431)
+- **Status:** OPEN (accepted for demo)
+- **Severity:** MEDIUM (production), LOW (demo)
+- **Description:** Identity signs JWTs with an in-memory generated RSA keypair (`KeyRepository`); no key
+  is persisted. Any restart invalidates all previously issued tokens and keys cannot be shared across
+  replicas. Compose sets `JWT_SECRET` for 6 services but it is read nowhere (dead config, F-431).
+- **Mitigation:** For the demo, accepted and documented. For production: persist/load a keypair from a
+  keystore or secret manager (or move to a managed OIDC provider) and remove the dead `JWT_SECRET` env.
+
+## R-012: M1/M4.7 broker-dependent verification still unproven (new, M4 validation)
+- **Status:** OPEN
+- **Severity:** MEDIUM
+- **Description:** RabbitMQ is not running and Docker is off, so event topology, retry/DLQ and WS fan-out
+  could not be exercised; M1's broker leg and M4.7 evidence remain PENDING. With the broker down,
+  `/actuator/health` on the event-publishing services reports DOWN (503) even when events are disabled
+  (F-432), so a broker-less run looks unhealthy.
+- **Mitigation:** Install a broker (R-007/R-009 paths) and run `scripts/rabbit-topology.sh`; for
+  broker-less dev, consider `management.health.rabbit.enabled: false`. Re-run broker-dependent evidence
+  before the M13 gate.

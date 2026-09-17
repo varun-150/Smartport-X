@@ -61,5 +61,14 @@ baseline Phase 4 starts from — every service is now slated for real implementa
   for event-integration milestones M4.7+).
 - **F-407/F-408:** notification/vessel schema details confirmations pending doc reads at M9/M7 (NOT code blockers).
 
+## Latest Validation (2026-09-17)
+Independent runtime validation of M1–M4 completed — see `.smartport/MODULE-CRITICAL-VALIDATION-REPORT.md`
+(evidence E-033). Verdicts: **M1 PASS** (broker leg pending), **M2 PASS**, **M3 PASS**, **M4 PASS**.
+One gateway defect found and fixed: **F-428** — CircuitBreaker fallback returned `405` for non-GET
+requests because `FallbackController` was GET-only while `forward:` preserves the request method
+(fixed → method-agnostic; `503`/`504` proven for POST). Runtime-proven: 8/8 Eureka registrations,
+7/7 Flyway V1 successful, RS256 login, 401/403 boundaries, rate limit `429` (104×200 / 26×429),
+breaker `503` + `504`. Open: R-009/R-012 (broker), R-007 (Docker), R-011 (ephemeral JWT key).
+
 ## Last Updated
-2026-08-27 (Phase 4 kickoff)
+2026-09-17 (M1–M4 critical validation, F-428 fixed)

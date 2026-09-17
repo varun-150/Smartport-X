@@ -3,7 +3,6 @@ package com.smartportx.gateway.controller;
 import com.smartportx.gateway.error.GatewayProblems;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,7 +20,7 @@ import reactor.core.publisher.Mono;
 @RequestMapping("/fallback")
 public class FallbackController {
 
-    @GetMapping("/{service}")
+    @RequestMapping("/{service}")
     public Mono<Void> fallback(@PathVariable String service, ServerWebExchange exchange) {
         Throwable ex = exchange.getAttribute(ServerWebExchangeUtils.CIRCUITBREAKER_EXECUTION_EXCEPTION_ATTR);
         if (GatewayProblems.isTimeout(ex)) {

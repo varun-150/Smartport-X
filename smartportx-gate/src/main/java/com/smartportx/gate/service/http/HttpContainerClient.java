@@ -6,7 +6,6 @@ import com.smartportx.gate.support.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -14,7 +13,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
-@ConditionalOnMissingBean(ContainerClient.class)
 public class HttpContainerClient implements ContainerClient {
 
     private static final Logger log = LoggerFactory.getLogger(HttpContainerClient.class);

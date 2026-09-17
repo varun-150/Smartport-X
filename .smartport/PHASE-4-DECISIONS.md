@@ -389,11 +389,27 @@
   time/date composites resolve against UTC (format 203/204). Unsupported message types and missing
   envelope segments produce RFC 9457 400s (`unsupported_message_type` / `validation_failed`).
 - **Consequences:** no external StAEDI dependency; the parser is deliberately a pragmatic subset and does not
-  claim full UN/EDIFACT compliance. Rollback-to-StAEDI is deferred and tracked alongside R-007.
-- **Status:** ACCEPTED (M8 close-out).
-
--------------------------------------------------------------------------------
-## PENDING / OPEN DECISIONS (surface before final gate)
+    claim full UN/EDIFACT compliance. Rollback-to-StAEDI is deferred and tracked alongside R-007.
+  - **Status:** ACCEPTED (M8 close-out).
+  
+  ## D-451 - Gateway CircuitBreaker fallback must be method-agnostic (M4 validation)
+  - **Context:** Runtime validation of M4 found that when a route's CircuitBreaker tripped or an upstream
+    was unavailable, POST/PUT/DELETE requests through the gateway returned `405 Method Not Allowed`
+    (F-428) instead of the contracted RFC-9457 `503`/`504`. Root cause: routes use
+    `fallbackUri: forward:/fallback/{service}`, and a Spring `forward:` **preserves the original HTTP
+    method**, while `FallbackController` was annotated `@GetMapping("/{service}")` (GET-only). The
+    existing `GatewayResilienceTest` exercised GET fallbacks only, so the defect escaped the suite.
+  - **Decision:** make the fallback handler method-agnostic — `@RequestMapping("/{service}")` — so every
+    HTTP method that trips a breaker reaches the same `503`/`504` mapping. The single fallback entry
+    point and the `GatewayProblems.isTimeout` classifier are retained unchanged.
+  - **Consequences:** write requests now receive the documented, retryable edge errors and the fallback
+    contract holds for all methods. Verified post-fix: POST notification → `504 gateway_timeout`, POST
+    `/fallback/yard` → `503 service_unavailable`, GET unchanged, and login/routing/rate-limit
+    regressions re-run clean. Test-suite gap recorded: resilience coverage should add a non-GET case.
+  - **Status:** ACCEPTED (M4 validation).
+  
+  -------------------------------------------------------------------------------
+  ## PENDING / OPEN DECISIONS (surface before final gate)
 - D-420: Notification service persistence (depends F-407 §11 read at M9).
 - D-421: Vessel service exact schema columns — RESOLVED by D-447 (M7 superset DDL + vocabulary) and the
   VesselSchemas DDL; folded into D-447.

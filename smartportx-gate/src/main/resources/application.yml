@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: gate
+    name: smartportx-gate
   jackson:
     default-property-inclusion: non_null
   datasource:

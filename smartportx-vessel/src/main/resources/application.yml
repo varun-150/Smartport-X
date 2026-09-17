@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: vessel
+    name: smartportx-vessel
   jackson:
     default-property-inclusion: non_null
   datasource:

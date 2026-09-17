@@ -633,3 +633,51 @@ Each entry:
   problem mappers) + 3 test suites + `StubUpstreamServer` + `GatewayTestTokens` (14); surefire
   XML (eureka tests=5, gateway tests=14, failures 0); mvn output truncated per-module
   (`Tests run: 5` / `Tests run: 14` + reactor summary 11/11 `BUILD SUCCESS`).
+- **Correction (E-033, 2026-09-17):** two statements above are inaccurate and are corrected here rather
+  than rewritten — (1) `RateLimitGlobalFilter` is a **custom in-memory token bucket**, not bucket4j
+  (no bucket4j dependency exists) — F-429; (2) the edge filter class is `JwtEdgeFilter`, not
+  `EdgeJwtAuthFilter` — F-430. Route count is 9 route ids, not 10 — see report §8.
+
+## E-033: Module critical validation — M1 Infrastructure, M2 discovery, M3 auth, M4 edge (F-428 fixed)
+- **Requirement:** Independently validate the delivered M1–M4 slices at runtime (not just via unit
+  tests): M1 infrastructure (schemas, Flyway, compose, discovery), M2 shared-common + microservice
+  discovery, M3 identity/JWT auth, M4 gateway edge (rate limit + CircuitBreaker), and fix any
+  confirmed defect before writing the validation report.
+- **Implementation (fix):** one real defect found and fixed — **F-428**. Routes use
+  `fallbackUri: forward:/fallback/{service}`; because a Spring `forward:` preserves the original HTTP
+  method and `FallbackController` was annotated `@GetMapping("/{service}")` (GET-only), POST/PUT/DELETE
+  fallbacks returned `405 Method Not Allowed` instead of the contracted RFC-9457 `503`/`504`.
+  `FallbackController` changed to `@RequestMapping("/{service}")` (method-agnostic); unused
+  `GetMapping` import removed. Existing `GatewayResilienceTest` covered GET fallbacks only, which is
+  why the suite did not catch it.
+- **Test / runtime evidence (FACT):**
+  - **M1:** 7 `smartportx_*` schemas; Flyway `V1` present and `success = true` in all 7 (1 entry each);
+    37 base tables (container 5, gate 5, identity 6, integration 5, notification 3, vessel 5, yard 8);
+    `docker compose config --quiet` exit 0; 7/7 `V1__init.sql` present; `scripts/init-databases.sh` +
+    `scripts/rabbit-topology.sh` present; Eureka **8/8** registered.
+  - **M2:** through the gateway — `GET /api/v1/yard/blocks` 200, `/api/v1/appointments` 200,
+    `/api/v1/vessels` 200, `/api/v1/containers` 200 (cross-service discovery resolve).
+  - **M3:** `POST /api/v1/auth/login` 200 with 900-char JWT, header `{"kid":"identity-1","alg":"RS256"}`;
+    `GET /api/v1/auth/jwks` 200 (public); no token → 401; viewer yard/blocks 200 but `/api/v1/users` 403;
+    admin `/api/v1/users` 200.
+  - **M4:** rate limit burst 130 → **104×200 / 26×429** (capacity 100, refill 60/min); breaker timeout
+    branch → **504 `gateway_timeout`** (`instance: /fallback/notification`); no-instance branch →
+    **503 `service_unavailable`** (`instance: /fallback/yard`); all bodies RFC-9457 with correlationId.
+  - **F-428 post-fix proof:** `POST /api/v1/notifications/preferences` (upstream down) → **504**
+    (was 405); `POST /fallback/yard` → **503** (was 405); `GET /fallback/yard` → 503 (unchanged);
+    regressions clean (login 200, yard/blocks 200, rate limit 104/26).
+- **Result:** PASS — M1 PASS (broker-dependent leg PENDING: RabbitMQ unavailable, Docker off),
+  M2 PASS, M3 PASS, M4 PASS (after F-428 fix). Findings raised: F-428 (fixed), F-429 (E-032 says
+  bucket4j; code is a custom token bucket), F-430 (E-032 says `EdgeJwtAuthFilter`; file is
+  `JwtEdgeFilter`), F-431 (dead `JWT_SECRET`, identity uses an in-memory RSA keypair), F-432
+  (broker-down → actuator DOWN though events disabled), F-433 (`SEED_DEMO_USERS` not in compose),
+  F-434 (Docker daemon off). Report: `.smartport/MODULE-CRITICAL-VALIDATION-REPORT.md`. Decisions:
+  D-451. Risks: R-011, R-012.
+- **Review:** Lead/Orchestrator (adversarial runtime probing beyond the unit suite). The defect was
+  found by exercising **non-GET** fallback paths, which no existing test did; a resilience test with a
+  POST/PUT upstream-down case is recommended as follow-up.
+- **Evidence:** runtime HTTP transcripts (status/body/time) for login, JWKS, 401/403 boundaries,
+  rate-limit burst, 503/504 fallback branches, and the F-428 POST proof; `docker compose config`
+  exit 0; PostgreSQL queries for schemas/Flyway/table counts; Eureka `apps` JSON (8/8);
+  `FallbackController.java` diff (`@GetMapping` → `@RequestMapping`); rebuilt gateway jar
+  (`mvn -B -ntp -pl smartportx-gateway -DskipTests package` BUILD SUCCESS).

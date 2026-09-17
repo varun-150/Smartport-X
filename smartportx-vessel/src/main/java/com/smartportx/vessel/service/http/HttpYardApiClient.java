@@ -5,7 +5,6 @@ import com.smartportx.vessel.support.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -14,7 +13,6 @@ import java.util.Map;
 import java.util.UUID;
 
 @Component
-@ConditionalOnMissingBean(YardApiClient.class)
 public class HttpYardApiClient implements YardApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(HttpYardApiClient.class);

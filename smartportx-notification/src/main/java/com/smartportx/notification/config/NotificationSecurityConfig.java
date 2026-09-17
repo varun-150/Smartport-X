@@ -62,6 +62,7 @@ public class NotificationSecurityConfig {
                         // STOMP endpoints authenticate over the WebSocket handshake + STOMP frame channel.
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/ws", "/ws/**").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(rs -> rs
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))

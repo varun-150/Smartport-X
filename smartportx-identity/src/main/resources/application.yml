@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: identity
+    name: smartportx-identity
   jackson:
     default-property-inclusion: non_null
   datasource:

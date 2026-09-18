@@ -674,10 +674,20 @@ Each entry:
   F-434 (Docker daemon off). Report: `.smartport/MODULE-CRITICAL-VALIDATION-REPORT.md`. Decisions:
   D-451. Risks: R-011, R-012.
 - **Review:** Lead/Orchestrator (adversarial runtime probing beyond the unit suite). The defect was
-  found by exercising **non-GET** fallback paths, which no existing test did; a resilience test with a
-  POST/PUT upstream-down case is recommended as follow-up.
+  found by exercising **non-GET** fallback paths, which no existing test did. Follow-up closed in this
+  pass: `GatewayResilienceTest` gained POST and DELETE upstream-down cases (below).
+- **Test hardening (FACT, follow-up closed):** `GatewayResilienceTest` now pins the method-agnostic
+  contract with `postFallbackPreservesMethodYielding503ProblemJson` (POST `/api/v1/integration/edifact`
+  to a dead upstream) and `deleteFallbackPreservesMethodYielding503ProblemJson`; the test profile binds
+  `GATEWAY_URI_SMARTPORTX_INTEGRATION` to the dead port `127.0.0.1:1`. **Mutation check (proves the
+  guard bites):** re-introducing the defect (`@RequestMapping` → `@GetMapping` on
+  `FallbackController.fallback`) made exactly those two tests fail with
+  `Status expected:<503 SERVICE_UNAVAILABLE> but was:<405 METHOD_NOT_ALLOWED>`; restoring the fix
+  returned the suite to green. Gateway suite: **16/16** (`GatewayResilienceTest` 4/4,
+  `GatewayEdgeContractTest` 11/11, `GatewayRateLimitTest` 1/1), `BUILD SUCCESS`.
 - **Evidence:** runtime HTTP transcripts (status/body/time) for login, JWKS, 401/403 boundaries,
   rate-limit burst, 503/504 fallback branches, and the F-428 POST proof; `docker compose config`
   exit 0; PostgreSQL queries for schemas/Flyway/table counts; Eureka `apps` JSON (8/8);
   `FallbackController.java` diff (`@GetMapping` → `@RequestMapping`); rebuilt gateway jar
-  (`mvn -B -ntp -pl smartportx-gateway -DskipTests package` BUILD SUCCESS).
+  (`mvn -B -ntp -pl smartportx-gateway -DskipTests package` BUILD SUCCESS); `mvn -pl smartportx-gateway
+  test` transcripts — 16/16 green with the fix, 2 failures (405) with the defect re-introduced.

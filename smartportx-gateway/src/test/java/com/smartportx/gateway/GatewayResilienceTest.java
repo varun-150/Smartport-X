@@ -17,7 +17,9 @@ import java.io.IOException;
 /**
  * Resilience boundaries for M10.6: upstream timeout surfaces as 504 problem+json, and a
  * dead downstream triggers the per-route CircuitBreaker fallback producing 503
- * problem+json.
+ * problem+json. Non-GET requests are covered explicitly because the fallback forward
+ * preserves the original HTTP method (F-428): a GET-only fallback handler returned 405
+ * for POST/PUT/DELETE instead of 503.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -35,6 +37,7 @@ class GatewayResilienceTest {
         registry.add("spring.cloud.gateway.server.webflux.httpclient.connect-timeout", () -> 500);
         registry.add("GATEWAY_URI_SMARTPORTX_CONTAINER", () -> "http://127.0.0.1:" + slowStub.port());
         registry.add("GATEWAY_URI_SMARTPORTX_VESSEL", () -> "http://127.0.0.1:1");
+        registry.add("GATEWAY_URI_SMARTPORTX_INTEGRATION", () -> "http://127.0.0.1:1");
     }
 
     @BeforeAll
@@ -70,6 +73,38 @@ class GatewayResilienceTest {
                 .baseUrl("http://127.0.0.1:" + port).build();
 
         client.get().uri("/api/v1/vessels/VS-1001")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + GatewayTestTokens.admin())
+                .exchange()
+                .expectStatus().isEqualTo(503)
+                .expectBody()
+                .jsonPath("$.type").isEqualTo("urn:smartportx:problems:service_unavailable")
+                .jsonPath("$.code").isEqualTo("service_unavailable")
+                .jsonPath("$.status").isEqualTo(503);
+    }
+
+    @Test
+    void postFallbackPreservesMethodYielding503ProblemJson() {
+        WebTestClient client = WebTestClient.bindToServer()
+                .baseUrl("http://127.0.0.1:" + port).build();
+
+        client.post().uri("/api/v1/integration/edifact")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + GatewayTestTokens.admin())
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .bodyValue("{\"messageType\":\"COPRAR\"}")
+                .exchange()
+                .expectStatus().isEqualTo(503)
+                .expectBody()
+                .jsonPath("$.type").isEqualTo("urn:smartportx:problems:service_unavailable")
+                .jsonPath("$.code").isEqualTo("service_unavailable")
+                .jsonPath("$.status").isEqualTo(503);
+    }
+
+    @Test
+    void deleteFallbackPreservesMethodYielding503ProblemJson() {
+        WebTestClient client = WebTestClient.bindToServer()
+                .baseUrl("http://127.0.0.1:" + port).build();
+
+        client.delete().uri("/api/v1/integration/edifact/SPX-1")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + GatewayTestTokens.admin())
                 .exchange()
                 .expectStatus().isEqualTo(503)

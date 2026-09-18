@@ -20,7 +20,7 @@
 | smartportx-vessel | smartportx-vessel | 8085 | smartportx_vessel | VERIFIED | — | 22 | — | — | E-033 | — | E-029, E-033 |
 | smartportx-integration | smartportx-integration | 8086 | smartportx_integration | VERIFIED | — | 31 | — | — | — | — | E-030 |
 | smartportx-notification | smartportx-notification | 8087 | smartportx_notification | VERIFIED | — | — | — | — | — | — | E-031 |
-| smartportx-gateway | smartportx-gateway | 8080 | — | VERIFIED | — | — | — | — | E-033 | — | E-032, E-033 |
+| smartportx-gateway | smartportx-gateway | 8080 | — | VERIFIED | 16 | — | — | — | E-033 | — | E-032, E-033 |
 | smartportx-eureka | smartportx-eureka | 8761 | — | VERIFIED | — | — | — | — | E-033 | — | E-032, E-033 |
 | smartportx-dashboard | smartportx-dashboard | 3000 | — | TESTED | TESTED | — | — | — | — | — | E-021 |
 

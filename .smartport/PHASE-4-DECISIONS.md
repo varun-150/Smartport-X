@@ -405,7 +405,9 @@
   - **Consequences:** write requests now receive the documented, retryable edge errors and the fallback
     contract holds for all methods. Verified post-fix: POST notification → `504 gateway_timeout`, POST
     `/fallback/yard` → `503 service_unavailable`, GET unchanged, and login/routing/rate-limit
-    regressions re-run clean. Test-suite gap recorded: resilience coverage should add a non-GET case.
+    regressions re-run clean. Test-suite gap **closed**: `GatewayResilienceTest` now covers POST and
+    DELETE fallbacks; a mutation check (temporarily restoring `@GetMapping`) fails exactly those two
+    cases with `405`, and the restored suite is green at 16/16 (E-033).
   - **Status:** ACCEPTED (M4 validation).
   
   -------------------------------------------------------------------------------

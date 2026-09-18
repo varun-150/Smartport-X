@@ -136,6 +136,11 @@ Burst of **130** requests to `/api/v1/yard/blocks` (post-restart, fresh bucket):
   - `POST /fallback/yard` → **503 `service_unavailable`** — was 405 before the fix;
   - `GET /fallback/yard` → **503** (unchanged);
   - regression: login 200 (jwt 900), `GET /api/v1/yard/blocks` 200, rate limit 104×200/26×429.
+- **Regression guard (FACT, follow-up closed):** `GatewayResilienceTest` gained
+  `postFallbackPreservesMethodYielding503ProblemJson` and
+  `deleteFallbackPreservesMethodYielding503ProblemJson` (dead upstream `127.0.0.1:1`). A **mutation
+  check** re-introducing `@GetMapping` failed exactly these two tests with
+  `expected:<503> but was:<405>`; the restored suite is **16/16 green** (`BUILD SUCCESS`).
 
 **M4 verdict: PASS after F-428 fix.**
 
@@ -145,7 +150,7 @@ Burst of **130** requests to `/api/v1/yard/blocks` (post-restart, fresh bucket):
 
 | ID | Severity | Status | Finding |
 |---|---|---|---|
-| **F-428** | HIGH | **FIXED + VERIFIED** | CircuitBreaker fallback returned `405 Method Not Allowed` for POST/PUT/DELETE because `FallbackController` was GET-only while `forward:` preserves the method. Fixed to method-agnostic mapping; 504/503 proven after fix. |
+| **F-428** | HIGH | **FIXED + VERIFIED (regression test added)** | CircuitBreaker fallback returned `405 Method Not Allowed` for POST/PUT/DELETE because `FallbackController` was GET-only while `forward:` preserves the method. Fixed to method-agnostic mapping; 504/503 proven after fix, and POST/DELETE covered by `GatewayResilienceTest` (mutation-checked). |
 | **F-429** | LOW | OPEN (doc) | `E-032` describes `RateLimitGlobalFilter` as using **bucket4j**; the implementation is a **custom in-memory token bucket** (`static final class Bucket`) and there is no bucket4j dependency. |
 | **F-430** | LOW | OPEN (doc) | `E-032` names the edge filter `EdgeJwtAuthFilter`; the actual class is `JwtEdgeFilter`. |
 | **F-431** | MEDIUM | OPEN | `JWT_SECRET` is set for 6 services in `docker-compose.yml` but read nowhere — identity signs with an **in-memory generated RSA keypair** (`KeyRepository`), so tokens are invalidated by any restart and cannot be shared across replicas. Dead config misleads operators. |

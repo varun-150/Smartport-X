@@ -685,6 +685,11 @@ Each entry:
   `Status expected:<503 SERVICE_UNAVAILABLE> but was:<405 METHOD_NOT_ALLOWED>`; restoring the fix
   returned the suite to green. Gateway suite: **16/16** (`GatewayResilienceTest` 4/4,
   `GatewayEdgeContractTest` 11/11, `GatewayRateLimitTest` 1/1), `BUILD SUCCESS`.
+- **Repo-wide regression (FACT):** `mvn -B -ntp test` over the full reactor (10 modules) is
+  **BUILD SUCCESS** in 3:35 — **321 tests, 0 failures, 0 errors, 0 skipped** (common 17, eureka 5,
+  gateway 16, identity 23, container 50, yard 37, gate 63, vessel 22, integration 31,
+  notification 57). Confirms the service-name/Eureka-alignment and
+  `@ConditionalOnMissingBean`-removal changes introduced no test regressions.
 - **Evidence:** runtime HTTP transcripts (status/body/time) for login, JWKS, 401/403 boundaries,
   rate-limit burst, 503/504 fallback branches, and the F-428 POST proof; `docker compose config`
   exit 0; PostgreSQL queries for schemas/Flyway/table counts; Eureka `apps` JSON (8/8);

@@ -6,6 +6,7 @@
 > 46 FR (REQUIREMENTS.md) / 16 NFR groups (NON-FUNCTIONAL-REQUIREMENTS.md) / 36 SR (SECURITY-REQUIREMENTS.md).
 > Last updated: 2026-09-17 (M1–M4 critical validation E-033; F-428 fixed). Rows below now carry their
 > milestone evidence (E-024–E-032); the earlier E-021 SCAFFOLDED rows are superseded.
+> Repo-wide regression: full reactor `mvn test` green — 321 tests, 0 failures (E-033).
 
 --------------------------------------------------------------------------------
 ## 1. SERVICE STATUS

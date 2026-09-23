@@ -40,6 +40,8 @@ smartportx:
           roles: [ADMIN]
         - path: /api/v1/notifications
           roles: [ADMIN, TERMINAL_OP, YARD_MANAGER, GATE_OPERATOR, READONLY]
+        - path: /api/v1/testimonials
+          roles: [ADMIN, TERMINAL_OP, YARD_MANAGER, GATE_OPERATOR, READONLY]
         - path: /api/v1/users
           roles: [ADMIN]
     rate-limit:

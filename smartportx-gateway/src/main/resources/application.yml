@@ -88,6 +88,15 @@ spring:
           uri: ${GATEWAY_URI_SMARTPORTX_NOTIFICATION_WS:lb:ws://smartportx-notification}
           predicates:
             - Path=/ws/**
+        - id: smartportx-testimonials
+          uri: ${GATEWAY_URI_SMARTPORTX_NOTIFICATION:lb://smartportx-notification}
+          predicates:
+            - Path=/api/v1/testimonials/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: gateway-notification
+                fallbackUri: forward:/fallback/notification
 
 smartportx:
   gateway:
@@ -118,6 +127,8 @@ smartportx:
         - path: /api/v1/integration
           roles: [ADMIN]
         - path: /api/v1/notifications
+          roles: [ADMIN, TERMINAL_OP, YARD_MANAGER, GATE_OPERATOR, READONLY]
+        - path: /api/v1/testimonials
           roles: [ADMIN, TERMINAL_OP, YARD_MANAGER, GATE_OPERATOR, READONLY]
         - path: /api/v1/users
           roles: [ADMIN]

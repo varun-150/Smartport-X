@@ -21,6 +21,7 @@ smartportx:
   notification:
     alert:
       dedupe-window-seconds: 5
+    seed-testimonials: false
 
 eureka:
   client:

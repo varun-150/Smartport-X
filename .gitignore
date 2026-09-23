@@ -36,4 +36,11 @@ application-local.yml
 # Test/run artifacts
 hs_err_pid*
 replay_pid*
-*.hprof
+*.hprof# Playwright debug/test artifacts
+test-results/
+playwright-report/
+verify.tmp.mjs
+pw-debug.mjs
+
+# Runtime pid files
+scripts/*.pid

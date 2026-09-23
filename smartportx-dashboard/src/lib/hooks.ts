@@ -1,42 +1,55 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+// Shared React hooks.
 
-interface AsyncResult<T> {
-  data: T | null;
-  error: unknown;
-  loading: boolean;
-  reload: () => void;
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+export interface AsyncState<T> {
+  data: T | null
+  error: unknown | null
+  loading: boolean
+  reload: () => void
 }
 
-export function useAsync<T>(fn: () => Promise<T>, deps: readonly unknown[] = []): AsyncResult<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [loading, setLoading] = useState(true);
-  const [tick, setTick] = useState(0);
-  const fnRef = useRef(fn);
-  fnRef.current = fn;
-
-  const run = useCallback(() => setTick((t) => t + 1), []);
+/** Runs an async loader on mount and exposes data/error/loading + reload. */
+export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []): AsyncState<T> {
+  const [data, setData] = useState<T | null>(null)
+  const [error, setError] = useState<unknown>(null)
+  const [loading, setLoading] = useState(true)
+  const [tick, setTick] = useState(0)
+  const loaderRef = useRef(loader)
+  loaderRef.current = loader
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fnRef
-      .current()
-      .then((result) => {
-        if (!cancelled) setData(result);
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    loaderRef.current()
+      .then((value) => {
+        if (!cancelled) setData(value)
       })
-      .catch((err) => {
-        if (!cancelled) setError(err);
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err)
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+        if (!cancelled) setLoading(false)
+      })
     return () => {
-      cancelled = true;
-    };
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, tick]);
+  }, [tick, ...deps])
 
-  return { data, error, loading, reload: run };
+  const reload = useCallback(() => setTick((t) => t + 1), [])
+
+  return { data, error, loading, reload }
+}
+
+/** SetInterval abstraction with auto-cleanup (used for degraded reconnect polling). */
+export function useInterval(fn: () => void, delayMs: number | null): void {
+  const fnRef = useRef(fn)
+  fnRef.current = fn
+  useEffect(() => {
+    if (delayMs == null) return
+    const id = window.setInterval(() => fnRef.current(), delayMs)
+    return () => window.clearInterval(id)
+  }, [delayMs])
 }

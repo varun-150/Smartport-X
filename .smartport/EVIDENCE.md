@@ -575,7 +575,8 @@ Each entry:
 - **Requirement:** M10 per PHASE-4-IMPLEMENTATION-PLAN — standalone discovery server
   (`smartportx-eureka`) and the "gateway edge" slice (`smartportx-gateway`): (1) Eureka server with
   basic-auth-protected dashboard while discovery registration `/eureka/**` and `actuator/health`
-  stay open for unauthenticated clients; (2) gateway routing — 10 routes whose predicates match
+  stay open for unauthenticated clients; (2) gateway routing — 9 routes whose predicates match
+  (count corrected from 10; see F-429/F-430 correction note)
   `application.yml` exactly (community truth), edge JWT authentication at the gateway (not per
   service), role-based route authorization, trusted-header injection for downstream services,
   correlation-ID echo, per-route rate limiting with RFC 9457 `429`, per-route CircuitBreaker with
@@ -589,14 +590,16 @@ Each entry:
   plain `http://eureka:8761/eureka`. New module-local `Dockerfile` (single-stage jar copy on
   `eclipse-temurin:25-jre`, `curl` for healthcheck) — build context is the module dir so an
   in-image reactor build is impossible; jared-boot builds remain M12 scope.
-  `smartportx-gateway` (WebMVC gateway, no smartportx-common dependency): `GatewayConfig` — RS256
+  `smartportx-gateway` (reactive WebFlux gateway on `spring-cloud-starter-gateway`, **not** WebMVC —
+  corrected; no smartportx-common dependency): `GatewayConfig` — RS256
   `JwtDecoder` bound to `IDENTITY_JWKS_URI` (default `http://identity:8081/api/v1/auth/jwks`);
-  `EdgeJwtAuthFilter` (order −100) strips client-supplied `X-User-Id`/`X-User-Role`, enforces the
+  `JwtEdgeFilter` (order −100) strips client-supplied `X-User-Id`/`X-User-Role`, enforces the
   whitelist (`POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`,
   `GET /api/v1/auth/jwks`, `/actuator/health`, `/actuator/info`), and injects trusted headers from
   the JWT (`sub` → `X-User-Id`, `roles[0]` → `X-User-Role`), rejecting with `401 unauthorized` /
   `403 forbidden` problem+json; `CorrelationWebFilter` (order −1000) echoes `X-Correlation-Id`;
-  `RateLimitGlobalFilter` (order 0, bucket4j) keys per-route on `routeId|user:<id>` else
+  `RateLimitGlobalFilter` (order 0, custom in-memory token bucket, **not** bucket4j — F-429)
+  keys per-route on `routeId|user:<id>` else
   `routeId|ip:<ip>`, returns `429 rate_limited` problem+json with `Retry-After`, `/ws/**` exempt;
   per-route CircuitBreaker (`fallbackUri: forward:/fallback/{svc}` on all but `/ws/**`) with
   timeouts under `spring.cloud.gateway.server.webflux.httpclient.*`
@@ -633,10 +636,10 @@ Each entry:
   problem mappers) + 3 test suites + `StubUpstreamServer` + `GatewayTestTokens` (14); surefire
   XML (eureka tests=5, gateway tests=14, failures 0); mvn output truncated per-module
   (`Tests run: 5` / `Tests run: 14` + reactor summary 11/11 `BUILD SUCCESS`).
-- **Correction (E-033, 2026-09-17):** two statements above are inaccurate and are corrected here rather
-  than rewritten — (1) `RateLimitGlobalFilter` is a **custom in-memory token bucket**, not bucket4j
+- **Correction (E-033, 2026-09-17):** the statements above were inaccurate and have been corrected inline
+  (rewritten in place) — (1) `RateLimitGlobalFilter` is a **custom in-memory token bucket**, not bucket4j
   (no bucket4j dependency exists) — F-429; (2) the edge filter class is `JwtEdgeFilter`, not
-  `EdgeJwtAuthFilter` — F-430. Route count is 9 route ids, not 10 — see report §8.
+  `EdgeJwtAuthFilter` — F-430. Route count is 9 route ids, not 10; the gateway is reactive WebFlux (`spring-cloud-starter-gateway`), not WebMVC — see report §8.
 
 ## E-033: Module critical validation — M1 Infrastructure, M2 discovery, M3 auth, M4 edge (F-428 fixed)
 - **Requirement:** Independently validate the delivered M1–M4 slices at runtime (not just via unit
@@ -667,9 +670,10 @@ Each entry:
     (was 405); `POST /fallback/yard` → **503** (was 405); `GET /fallback/yard` → 503 (unchanged);
     regressions clean (login 200, yard/blocks 200, rate limit 104/26).
 - **Result:** PASS — M1 PASS (broker-dependent leg PENDING: RabbitMQ unavailable, Docker off),
-  M2 PASS, M3 PASS, M4 PASS (after F-428 fix). Findings raised: F-428 (fixed), F-429 (E-032 says
-  bucket4j; code is a custom token bucket), F-430 (E-032 says `EdgeJwtAuthFilter`; file is
-  `JwtEdgeFilter`), F-431 (dead `JWT_SECRET`, identity uses an in-memory RSA keypair), F-432
+  M2 PASS, M3 PASS, M4 PASS (after F-428 fix). Findings raised: F-428 (fixed), F-429 (E-032 said
+  bucket4j — CORRECTED inline to custom in-memory token bucket), F-430 (E-032 said
+  `EdgeJwtAuthFilter` — CORRECTED inline to `JwtEdgeFilter`; also corrected "WebMVC" to reactive
+  WebFlux and route count 10 to 9), F-431 (dead `JWT_SECRET`, identity uses an in-memory RSA keypair), F-432
   (broker-down → actuator DOWN though events disabled), F-433 (`SEED_DEMO_USERS` not in compose),
   F-434 (Docker daemon off). Report: `.smartport/MODULE-CRITICAL-VALIDATION-REPORT.md`. Decisions:
   D-451. Risks: R-011, R-012.
@@ -696,3 +700,55 @@ Each entry:
   `FallbackController.java` diff (`@GetMapping` → `@RequestMapping`); rebuilt gateway jar
   (`mvn -B -ntp -pl smartportx-gateway -DskipTests package` BUILD SUCCESS); `mvn -pl smartportx-gateway
   test` transcripts — 16/16 green with the fix, 2 failures (405) with the defect re-introduced.
+
+## E-034: Final adversarial audit pass (attack suite + frontend P1 fix + runtime re-verification, 2026-09-18)
+- **Requirement:** Single-pass, independent adversarial audit of the delivered platform before final
+  report: (A) auth/boundary attack suite through the live gateway; (B) frontend completeness +
+  buildability (dashboard pages under `smartportx-dashboard`); (C) runtime health/discovery
+  re-verification; (D) regression evidence. Any confirmed defect must be fixed in-place before the
+  audit report is written.
+- **Implementation (fix — P1):** the dashboard did not build (`npm run build` = `tsc -b && vite build`
+  FAILED). Six pages were missing or unbuildable: `Vessels`, `Notifications`, `AdminUsers`, `System`,
+  `NotFound` were absent (App.tsx lazy routes pointed at nonexistent modules), `Gate` was rewritten,
+  and `Containers`/`Yard` carried strict-TS errors. All were written/fixed as default-export lazy pages
+  honoring the App.tsx role gates.
+- **Test / runtime evidence (FACT):**
+  - **Module A (attack suite `attack-a.ps1`, gateway :8080):** **18/18 PASS** — A1 login admin 200;
+    A1b token carries `accessToken`+`refreshToken`; A2 wrong-password 401; A3 unknown-user 401;
+    A4 no-token 401; A5 admin token 200; A6 tampered signature 401; A7 viewer→integration 403;
+    A7b spoofed `X-User-Role: ADMIN` with viewer token still 403 (edge strips client headers);
+    A7c spoofed `X-User-Id` still 200 (trusted header overwritten from JWT); A8 `GET /api/v1/auth/jwks`
+    tokenless 200; A8h `GET /actuator/health` tokenless 200 (whitelist); A9 refresh-with-refresh-token
+    200; A10 refresh-with-access-token 401; B1 direct container service no-token 401; B2 direct
+    service with JWT 200; B3 direct service with spoofed `X-User-Id` and no JWT 401; C 130× burst on
+    container list → 104×200 / 26×429 rate-limited (capacity 100, refill 60/min).
+  - **Module B (frontend):** after the P1 fix `npm run build` is **green** — `tsc -b` clean + `vite
+    build` 192 modules, dist bundles for all 6 pages emit (Containers/Gate/Vessels/Yard/AdminUsers/
+    Notifications/System/NotFound seen in output). Echo of strict tsconfig gates (`noUnusedLocals`,
+    `noUnusedParameters`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`) confirms no dead imports.
+  - **Module C (runtime):** actuator health **UP** on 8080–8086; Eureka registry shows **7/7 apps UP**
+    (SMARTPORTX-GATEWAY, -IDENTITY, -YARD, -VESSEL, -GATE, -CONTAINER, -INTEGRATION);
+    `smartportx-notification` (:8087) is not started in this runtime because it consumes live RabbitMQ
+    (Docker off, F-434), consistent with E-033/F-432.
+- **Result:** PASS for Modules A–D with two findings deviating from written documentation:
+  - **P1 (FIXED):** dashboard was unbuildable (missing/faulty pages) — fixed by writing the 6 pages
+    and correcting `Containers`/`Yard`; build now green. Decision: D-452.
+  - **P3 (RECORDED, NOT RE-TESTED per audit directive):** when a downstream is simply absent
+    (no registered instance), the gateway fallback returns **504 `gateway_timeout`** from the
+    `GatewayProblems.isTimeout` branch, whereas the written M4 contract (E-032) specifies
+    **503 `service_unavailable`** for a dead downstream. Root cause is that `isTimeout` also matches
+    load-balancer no-instance errors; the E-033 F-428 proof (`POST /api/v1/notifications/preferences`
+    upstream-down → 504) exhibits the same behavior. Behavior is fail-safe but un-documented.
+    Recommendation: treat absent-instance as `503` in `FallbackController` and extend
+    `GatewayResilienceTest` with a no-instance→503 case. Risk: R-013.
+  - Broker-dependent legs remain BLOCKED: R-007 live RabbitMQ, SC-10 GitHub Actions, digest dispatch,
+    live `/topic` push (RabbitMQ/Docker unavailable — F-432/F-434).
+- **Review:** Lead/Orchestrator adversarial pass; fix applied in-place and re-verified by the build.
+  No new code paths were unit-tested beyond the pre-existing 321-test suite (0 failures), which
+  remains green (E-033); the dashboard fix is verified by `tsc -b` + `vite build`, not by Jest.
+- **Evidence:** `attack-a.ps1` (18 assertions) + captured status/body/counts; `npm run build` output
+  (green, list of emitted dist assets); actuator health ×7; Eureka `apps` registry (7 UP);
+  `src/pages/{Vessels,Notifications,AdminUsers,System,NotFound}.tsx` new; `Gate.tsx` rewritten;
+  `Containers.tsx`/`Yard.tsx` corrected; `System.tsx` import fix (`containerApi.list`); Vessels
+  `DischargePlanResponse`→`PlanResponse` fix; Gate unused-import removal. Report:
+  `PROJECT-AUDIT-REPORT.md` (modules A–D).

@@ -6,9 +6,11 @@
 #   and name their schema via SERVICE_SCHEMA instead of per-service DATABASE_URL.
 # (Deviation recorded: .smartport/PHASE-4-DECISIONS.md D-424)
 #
-# NOTE: app services build from ./smartportx-*/Dockerfile — those Dockerfiles land
-# in the per-service milestones (M4..M12); infra (postgres/rabbitmq/monitoring) is
-# usable immediately.
+# NOTE (M12): all app services build from the repo-root multi-stage Dockerfile via
+# `context: .` + `target: smartportx-<service>`. The `builder` stage compiles and
+# repackages the FULL reactor inside the image, so no host-built JARs are needed:
+#   docker compose up --build            # builds everything, brings the stack up
+# The dashboard still uses its own node/nginx Dockerfile (context ./smartportx-dashboard).
 # =============================================================================
 
 services:
@@ -58,8 +60,9 @@ services:
 
   eureka:
     build:
-      context: ./smartportx-eureka
+      context: .
       dockerfile: Dockerfile
+      target: smartportx-eureka
     container_name: smartportx-eureka
     ports:
       - "8761:8761"
@@ -85,8 +88,9 @@ services:
 
   gateway:
     build:
-      context: ./smartportx-gateway
+      context: .
       dockerfile: Dockerfile
+      target: smartportx-gateway
     container_name: smartportx-gateway
     ports:
       - "8080:8080"
@@ -112,16 +116,18 @@ services:
 
   identity:
     build:
-      context: ./smartportx-identity
+      context: .
       dockerfile: Dockerfile
+      target: smartportx-identity
     container_name: smartportx-identity
     ports:
       - "8081:8081"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVICE_PORT: 8081
-      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_identity
       SERVICE_SCHEMA: smartportx_identity
+      SEED_DEMO_USERS: ${SEED_DEMO_USERS:-true}
       DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
       RABBITMQ_HOST: rabbitmq
@@ -129,7 +135,6 @@ services:
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
-      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -148,15 +153,16 @@ services:
 
   yard:
     build:
-      context: ./smartportx-yard
+      context: .
       dockerfile: Dockerfile
+      target: smartportx-yard
     container_name: smartportx-yard
     ports:
       - "8082:8082"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVICE_PORT: 8082
-      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_yard
       SERVICE_SCHEMA: smartportx_yard
       DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
@@ -165,7 +171,8 @@ services:
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
-      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
     depends_on:
       postgres:
         condition: service_healthy
@@ -186,15 +193,16 @@ services:
 
   gate:
     build:
-      context: ./smartportx-gate
+      context: .
       dockerfile: Dockerfile
+      target: smartportx-gate
     container_name: smartportx-gate
     ports:
       - "8083:8083"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVICE_PORT: 8083
-      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_gate
       SERVICE_SCHEMA: smartportx_gate
       DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
@@ -203,7 +211,8 @@ services:
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
-      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
     depends_on:
       postgres:
         condition: service_healthy
@@ -226,15 +235,16 @@ services:
 
   container:
     build:
-      context: ./smartportx-container
+      context: .
       dockerfile: Dockerfile
+      target: smartportx-container
     container_name: smartportx-container
     ports:
       - "8084:8084"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVICE_PORT: 8084
-      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_container
       SERVICE_SCHEMA: smartportx_container
       DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
@@ -243,7 +253,8 @@ services:
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
-      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
     depends_on:
       postgres:
         condition: service_healthy
@@ -262,15 +273,16 @@ services:
 
   vessel:
     build:
-      context: ./smartportx-vessel
+      context: .
       dockerfile: Dockerfile
+      target: smartportx-vessel
     container_name: smartportx-vessel
     ports:
       - "8085:8085"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVICE_PORT: 8085
-      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_vessel
       SERVICE_SCHEMA: smartportx_vessel
       DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
@@ -279,7 +291,8 @@ services:
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
-      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
     depends_on:
       postgres:
         condition: service_healthy
@@ -300,15 +313,16 @@ services:
 
   integration:
     build:
-      context: ./smartportx-integration
+      context: .
       dockerfile: Dockerfile
+      target: smartportx-integration
     container_name: smartportx-integration
     ports:
       - "8086:8086"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVICE_PORT: 8086
-      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_integration
       SERVICE_SCHEMA: smartportx_integration
       DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
@@ -317,7 +331,8 @@ services:
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
-      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
       IOT_MODE: simulation
       CUSTOMS_CLEARANCE_RATE: 0.7
     depends_on:
@@ -338,15 +353,16 @@ services:
 
   notification:
     build:
-      context: ./smartportx-notification
+      context: .
       dockerfile: Dockerfile
+      target: smartportx-notification
     container_name: smartportx-notification
     ports:
       - "8087:8087"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVICE_PORT: 8087
-      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx
+      DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_notification
       SERVICE_SCHEMA: smartportx_notification
       DATABASE_USERNAME: ${DATABASE_USERNAME:-smartportx}
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
@@ -355,6 +371,9 @@ services:
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
+      SEED_TESTIMONIALS: ${SEED_TESTIMONIALS:-true}
     depends_on:
       postgres:
         condition: service_healthy
@@ -379,11 +398,12 @@ services:
     build:
       context: ./smartportx-dashboard
       dockerfile: Dockerfile
+      args:
+        # Same-origin /api: nginx inside the container proxies /api & /ws -> gateway:8080.
+        VITE_API_BASE_URL: /api
     container_name: smartportx-dashboard
     ports:
       - "3000:3000"
-    environment:
-      VITE_API_BASE_URL: http://localhost:8080
     depends_on:
       gateway:
         condition: service_healthy

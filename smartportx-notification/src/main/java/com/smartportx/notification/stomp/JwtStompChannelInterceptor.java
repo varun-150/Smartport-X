@@ -70,6 +70,9 @@ public class JwtStompChannelInterceptor implements ChannelInterceptor {
         } catch (JwtException ex) {
             throw new MessagingException("Invalid access token: " + ex.getMessage());
         }
+        if ("refresh".equals(jwt.getClaimAsString("type"))) {
+            throw new MessagingException("Refresh tokens cannot authenticate a STOMP connection");
+        }
         Authentication authentication = new UsernamePasswordAuthenticationToken(
                 jwt.getSubject(), token, authorities(jwt));
         accessor.setUser(authentication);

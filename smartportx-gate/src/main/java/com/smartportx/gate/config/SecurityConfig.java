@@ -1,6 +1,7 @@
 package com.smartportx.gate.config;
 
 import com.smartportx.gate.security.JsonProblemHandler;
+import com.smartportx.common.security.AccessTokenValidators;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,8 +28,12 @@ import java.util.List;
 public class SecurityConfig {
 
     @Bean
-    public JwtDecoder jwtDecoder(@Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
-        return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+    public JwtDecoder jwtDecoder(
+            @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri,
+            @Value("${SMARTPORTX_JWT_ISSUER:smartportx-identity}") String issuer) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+        decoder.setJwtValidator(AccessTokenValidators.forIssuer(issuer));
+        return decoder;
     }
 
     @Bean

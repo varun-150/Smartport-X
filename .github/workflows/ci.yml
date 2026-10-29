@@ -71,11 +71,13 @@ jobs:
         run: npm run build
 
   security-scan:
-    name: Secrets & dependency scan (activated in M12)
+    name: Secret scan (Gitleaks)
     runs-on: ubuntu-latest
-    if: false
     steps:
+      # Gitleaks needs the base and head commits available to scan pull-request diffs.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:

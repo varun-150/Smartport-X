@@ -106,6 +106,20 @@ class GatewayEdgeContractTest {
     }
 
     @Test
+    void validRefreshTokenIsRejectedOnProtectedRoute() {
+        tokenRequest(GatewayTestTokens.refreshToken(), "/api/v1/containers/CTN-000132")
+                .expectStatus().isEqualTo(401)
+                .expectBody().jsonPath("$.code").isEqualTo("unauthorized");
+    }
+
+    @Test
+    void rolelessJwtIsDeniedOnRoleRestrictedRoute() {
+        tokenRequest(GatewayTestTokens.roleless(), "/api/v1/containers/CTN-000133")
+                .expectStatus().isEqualTo(403)
+                .expectBody().jsonPath("$.code").isEqualTo("forbidden");
+    }
+
+    @Test
     void missingTokenYields401ProblemJson() {
         client().get().uri("/api/v1/containers/CTN-000127")
                 .exchange()

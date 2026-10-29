@@ -47,6 +47,18 @@ class AuthFlowIntegrationTest extends BaseIdentityIntegrationTest {
     }
 
     @Test
+    void refreshTokenCannotAuthenticateAsBearerAtIdentityService() throws Exception {
+        String username = unique("refreshbearer");
+        createUser(username, PASSWORD, RoleName.ADMIN);
+        LoginResponse login = login(username, PASSWORD);
+
+        mockMvc.perform(get("/api/v1/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(login.refreshToken())))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("unauthorized"));
+    }
+
+    @Test
     void refreshRotatesTokensAndLogoutRevokesAll() throws Exception {
         String username = unique("rotat");
         createUser(username, PASSWORD, RoleName.READONLY);

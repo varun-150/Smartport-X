@@ -52,7 +52,7 @@ public class JwtEdgeFilter implements GlobalFilter, Ordered {
         HttpMethod method = exchange.getRequest().getMethod();
 
         if (HttpMethod.OPTIONS.equals(method)
-                || path.startsWith("/ws/")
+                || isWebSocketPath(path)
                 || isPublicRoute(path)
                 || isActuatorLiveness(path)) {
             return chain.filter(exchange);
@@ -73,9 +73,15 @@ public class JwtEdgeFilter implements GlobalFilter, Ordered {
     }
 
     private Mono<Void> authorize(ServerWebExchange exchange, GatewayFilterChain chain, Jwt jwt) {
+        // Refresh tokens are validly signed JWTs but are never API access credentials.
+        if ("refresh".equals(jwt.getClaimAsString("type"))) {
+            return GatewayProblems.write(exchange, HttpStatus.UNAUTHORIZED, "unauthorized",
+                    "Access token required");
+        }
+
         List<String> roles = jwt.getClaimAsStringList("roles");
         List<String> required = requiredRoles(exchange.getRequest().getPath().value());
-        if (required != null && roles != null && roles.stream().noneMatch(required::contains)) {
+        if (required != null && (roles == null || roles.stream().noneMatch(required::contains))) {
             return GatewayProblems.write(exchange, HttpStatus.FORBIDDEN, "forbidden",
                     "Insufficient role for requested resource");
         }
@@ -98,6 +104,10 @@ public class JwtEdgeFilter implements GlobalFilter, Ordered {
                 })
                 .build();
         return chain.filter(exchange.mutate().request(mutated).build());
+    }
+
+    static boolean isWebSocketPath(String path) {
+        return "/ws".equals(path) || path.startsWith("/ws/");
     }
 
     private boolean isPublicRoute(String path) {

@@ -308,7 +308,7 @@ export function classifyTestPath(input: string, role: RoleName): ClassifiedPath 
   if (!raw) return { ok: false, error: 'Enter a path to run.' }
   const stripped = raw.startsWith('/api') ? raw.replace(/^\/api/, '') : raw
   const [pathPart, query] = stripped.split('?')
-  if (!pathPart.startsWith('/v1/')) {
+  if (!pathPart || !pathPart.startsWith('/v1/')) {
     return { ok: false, error: 'Path must start with /v1/ (or /api/v1/).' }
   }
   if (pathPart.split('/').some((seg) => seg.includes('*'))) {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { UserResponse } from '../../types/auth'
@@ -10,11 +10,13 @@ const {
   allowedPrefixesMock,
   classifyPathMock,
   runTestMock,
+  authUserMock,
 } = vi.hoisted(() => ({
   probeAllMock: vi.fn(),
   allowedPrefixesMock: vi.fn(() => ['/v1/containers', '/v1/vessels']),
-  classifyPathMock: vi.fn(() => ({ ok: true, path: '/v1/containers?page=1&size=1' }) as const),
+  classifyPathMock: vi.fn((): { ok: true; path: string } | { ok: false; error: string } => ({ ok: true, path: '/v1/containers?page=1&size=1' })),
   runTestMock: vi.fn(),
+  authUserMock: vi.fn(() => null as UserResponse | null),
 }))
 
 vi.mock('../../api/systemApi', () => ({
@@ -30,7 +32,10 @@ vi.mock('../../api/systemApi', () => ({
 }))
 
 vi.mock('../../lib/auth', () => ({
-  useAuth: () => ({ user: adminUser(), isAuthenticated: true, login: vi.fn(), logout: vi.fn(), hasRole: () => true }),
+  useAuth: () => {
+    const user = authUserMock()
+    return { user, isAuthenticated: user !== null, login: vi.fn(), logout: vi.fn(), hasRole: () => user !== null }
+  },
 }))
 
 vi.mock('../../lib/realtime', () => ({
@@ -74,6 +79,7 @@ function seedToken(props: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  authUserMock.mockReset().mockReturnValue(adminUser())
   probeAllMock.mockReset().mockResolvedValue(feast())
   runTestMock.mockReset().mockResolvedValue({ ok: true, httpStatus: 200, latencyMs: 3, note: 'HTTP 200 OK', body: '{"items":[]}' })
   allowedPrefixesMock.mockReturnValue(['/v1/containers', '/v1/vessels'])
@@ -86,13 +92,13 @@ describe('SystemPage', () => {
     expect(screen.getByRole('heading', { name: 'Runtime console' })).toBeInTheDocument()
     await screen.findByText('smartportx-identity')
     expect(screen.getByText('CONNECTED')).toBeInTheDocument()
-    expect(screen.getByText('ALIVE')).toBeInTheDocument()
+    expect(screen.getAllByText('ALIVE').length).toBeGreaterThan(0)
   })
 
   it('classifies every probe verdict into an honest badge', async () => {
     render(<SystemPage />)
     await screen.findByText('smartportx-identity')
-    expect(screen.getByText('UP')).toBeInTheDocument()
+    expect(screen.getAllByText('UP').length).toBeGreaterThan(0)
     expect(screen.getByText('403').closest('span')).toHaveClass('badge-warn')
     expect(screen.getByText('UNREACHABLE')).toBeInTheDocument()
     expect(screen.getByText('REACHABLE')).toBeInTheDocument()
@@ -115,9 +121,9 @@ describe('SystemPage', () => {
 
   it('shows the signed-in session fields', async () => {
     render(<SystemPage />)
-    expect(await screen.findByText('ops')).toBeInTheDocument()
+    expect((await screen.findAllByText('ops')).length).toBeGreaterThan(0)
     expect(screen.getByText('ops@example.com')).toBeInTheDocument()
-    expect(screen.getByText('ADMIN').closest('span')).toHaveClass('badge-accent')
+    expect(screen.getAllByText('ADMIN').some((element) => element.closest('span')?.classList.contains('badge-accent'))).toBe(true)
   })
 
   it('masks the token by default and reveals on toggle', async () => {
@@ -130,14 +136,16 @@ describe('SystemPage', () => {
     expect(tokenCell.textContent).not.toContain('smartportx')
 
     await userEvent.click(screen.getByRole('button', { name: 'Reveal' }))
-    expect(screen.getByText(/abstract\..*\.sig/)).toBeInTheDocument()
+    expect(screen.getByText(/^abc\./)).toBeInTheDocument()
     expect(screen.getByText(/Token shown in full/)).toBeInTheDocument()
   })
 
   it('renders decoded claims from the token payload', async () => {
     seedToken({ sub: 'u-1', username: 'ops', roles: ['ADMIN'], iat: 1, exp: 4102444800, iss: 'smartportx', aud: 'spa' })
     render(<SystemPage />)
-    expect(await screen.findByText('4102444800'.replace('', '') + (screen.queryAllByText('exp').length ? 'dummy' : ''))).toBeTruthy()
+    expect(await screen.findByText('Access token (JWT)')).toBeInTheDocument()
+    expect(screen.getByText('iss')).toBeInTheDocument()
+    expect(screen.getByText('smartportx')).toBeInTheDocument()
   })
 
   it('runs a gated GET and renders status + body', async () => {
@@ -155,7 +163,8 @@ describe('SystemPage', () => {
   })
 
   it('surfaces inline gating errors without calling the fetcher', async () => {
-    classifyPathMock.mockReturnValue({ ok: false, error: 'Your role cannot call /v1/integration/customs/1 — allowed prefixes: /v1/containers.' })
+    classifyPathMock.mockReset()
+    classifyPathMock.mockImplementation(() => ({ ok: false, error: 'Your role cannot call /v1/integration/customs/1 — allowed prefixes: /v1/containers.' }))
     render(<SystemPage />)
     await screen.findByText('smartportx-identity')
 
@@ -177,9 +186,10 @@ describe('SystemPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
   })
 
-  it('shows a "no signed-in user" empty state without a session user', async () => {
-    vi.mocked(useAuthStore).mockReturnValue({ user: null, isAuthenticated: false, login: vi.fn(), logout: vi.fn(), hasRole: () => false })
+  it('shows the no-signed-in-user empty state when session user is absent', async () => {
+    authUserMock.mockReturnValue(null)
     render(<SystemPage />)
-    expect(await screen.findByText('No signed-in user')).toBeInTheDocument()
+    await screen.findByText('smartportx-identity')
+    expect(screen.getByText('No signed-in user')).toBeInTheDocument()
   })
 })

@@ -6,7 +6,7 @@ function b64url(obj: unknown): string {
   return btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function token(claims: Record<string, unknown>): string {
+function token(claims: unknown): string {
   return `header.${b64url(claims)}.signature`
 }
 

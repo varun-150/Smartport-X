@@ -32,6 +32,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -140,17 +141,12 @@ class StompWebSocketIntegrationTest {
         StompHeaders connectHeaders = new StompHeaders();
         connectHeaders.add("Authorization", "Bearer invalid-token");
 
-        try {
-            stompClient.connectAsync(
-                    "ws://localhost:" + port + "/ws",
-                    new WebSocketHttpHeaders(),
-                    connectHeaders,
-                    new StompSessionHandlerAdapter() {}
-            ).get(5, TimeUnit.SECONDS);
-            org.junit.jupiter.api.Assertions.fail("Connection should have been rejected");
-        } catch (Exception e) {
-            assertThat(e).isNotNull();
-        }
+        assertThatThrownBy(() -> stompClient.connectAsync(
+                "ws://localhost:" + port + "/ws",
+                new WebSocketHttpHeaders(),
+                connectHeaders,
+                new StompSessionHandlerAdapter() {}
+        ).get(5, TimeUnit.SECONDS)).isInstanceOf(Exception.class);
     }
 
     @Test
@@ -158,34 +154,24 @@ class StompWebSocketIntegrationTest {
         StompHeaders connectHeaders = new StompHeaders();
         connectHeaders.add("Authorization", "Bearer " + NotificationTestTokens.refreshToken());
 
-        try {
-            stompClient.connectAsync(
-                    "ws://localhost:" + port + "/ws",
-                    new WebSocketHttpHeaders(),
-                    connectHeaders,
-                    new StompSessionHandlerAdapter() {}
-            ).get(5, TimeUnit.SECONDS);
-            org.junit.jupiter.api.Assertions.fail("Refresh token must not authenticate a STOMP connection");
-        } catch (Exception e) {
-            assertThat(e).isNotNull();
-        }
+        assertThatThrownBy(() -> stompClient.connectAsync(
+                "ws://localhost:" + port + "/ws",
+                new WebSocketHttpHeaders(),
+                connectHeaders,
+                new StompSessionHandlerAdapter() {}
+        ).get(5, TimeUnit.SECONDS)).isInstanceOf(Exception.class);
     }
 
     @Test
     void connectWithNoToken_rejected() {
         StompHeaders connectHeaders = new StompHeaders();
 
-        try {
-            stompClient.connectAsync(
-                    "ws://localhost:" + port + "/ws",
-                    new WebSocketHttpHeaders(),
-                    connectHeaders,
-                    new StompSessionHandlerAdapter() {}
-            ).get(5, TimeUnit.SECONDS);
-            org.junit.jupiter.api.Assertions.fail("Connection should have been rejected");
-        } catch (Exception e) {
-            assertThat(e).isNotNull();
-        }
+        assertThatThrownBy(() -> stompClient.connectAsync(
+                "ws://localhost:" + port + "/ws",
+                new WebSocketHttpHeaders(),
+                connectHeaders,
+                new StompSessionHandlerAdapter() {}
+        ).get(5, TimeUnit.SECONDS)).isInstanceOf(Exception.class);
     }
 
     @Test

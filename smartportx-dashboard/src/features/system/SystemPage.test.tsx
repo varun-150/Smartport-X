@@ -137,7 +137,9 @@ describe('SystemPage', () => {
   it('renders decoded claims from the token payload', async () => {
     seedToken({ sub: 'u-1', username: 'ops', roles: ['ADMIN'], iat: 1, exp: 4102444800, iss: 'smartportx', aud: 'spa' })
     render(<SystemPage />)
-    expect(await screen.findByText('Token claims')).toBeInTheDocument()
+    expect(await screen.findByText('Access token (JWT)')).toBeInTheDocument()
+    expect(screen.getByText('iss')).toBeInTheDocument()
+    expect(screen.getByText('smartportx')).toBeInTheDocument()
   })
 
   it('runs a gated GET and renders status + body', async () => {

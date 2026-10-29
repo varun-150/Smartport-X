@@ -59,6 +59,28 @@ public final class NotificationTestTokens {
         return token(Set.of(), List.of(), "plain-user");
     }
 
+    /** A validly signed refresh token must not authenticate a WebSocket/STOMP session. */
+    public static String refreshToken() {
+        try {
+            Instant now = Instant.now();
+            JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                    .issuer(ISSUER)
+                    .subject(UUID.randomUUID().toString())
+                    .issueTime(Date.from(now))
+                    .expirationTime(Date.from(now.plus(Duration.ofDays(7))))
+                    .claim("type", "refresh")
+                    .claim("username", "refresh-user")
+                    .build();
+            JWSHeader header = new JWSHeader(JWSAlgorithm.RS256);
+            JWSSigner signer = new RSASSASigner(RSA_KEY.toPrivateKey());
+            SignedJWT signed = new SignedJWT(header, claims);
+            signed.sign(signer);
+            return signed.serialize();
+        } catch (Exception e) {
+            throw new IllegalStateException("token signing failed", e);
+        }
+    }
+
     public static String token(Set<String> roles, List<String> permissions, String username) {
         try {
             Instant now = Instant.now();

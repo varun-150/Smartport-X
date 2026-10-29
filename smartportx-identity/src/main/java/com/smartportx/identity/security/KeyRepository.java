@@ -1,6 +1,7 @@
 package com.smartportx.identity.security;
 
 import com.smartportx.identity.config.SecurityProperties;
+import com.smartportx.common.security.AccessTokenValidators;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -31,7 +32,9 @@ public class KeyRepository {
                     .keyID("identity-1")
                     .build();
             this.encoder = new NimbusJwtEncoder(new ImmutableJWKSet(new JWKSet(rsaKey)));
-            this.decoder = NimbusJwtDecoder.withPublicKey((RSAPublicKey) keyPair.getPublic()).build();
+            NimbusJwtDecoder identityDecoder = NimbusJwtDecoder.withPublicKey((RSAPublicKey) keyPair.getPublic()).build();
+            identityDecoder.setJwtValidator(AccessTokenValidators.forIssuer(properties.jwt().issuer()));
+            this.decoder = identityDecoder;
         } catch (Exception e) {
             throw new IllegalStateException("Failed to initialise RSA key material", e);
         }

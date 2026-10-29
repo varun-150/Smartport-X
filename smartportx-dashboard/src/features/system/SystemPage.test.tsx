@@ -13,7 +13,7 @@ const {
 } = vi.hoisted(() => ({
   probeAllMock: vi.fn(),
   allowedPrefixesMock: vi.fn(() => ['/v1/containers', '/v1/vessels']),
-  classifyPathMock: vi.fn(() => ({ ok: true, path: '/v1/containers?page=1&size=1' }) as const),
+  classifyPathMock: vi.fn((): { ok: true; path: string } | { ok: false; error: string } => ({ ok: true, path: '/v1/containers?page=1&size=1' })),
   runTestMock: vi.fn(),
 }))
 

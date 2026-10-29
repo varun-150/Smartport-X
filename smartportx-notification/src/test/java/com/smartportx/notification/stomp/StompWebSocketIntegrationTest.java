@@ -154,6 +154,24 @@ class StompWebSocketIntegrationTest {
     }
 
     @Test
+    void connectWithRefreshToken_rejected() {
+        StompHeaders connectHeaders = new StompHeaders();
+        connectHeaders.add("Authorization", "Bearer " + NotificationTestTokens.refreshToken());
+
+        try {
+            stompClient.connectAsync(
+                    "ws://localhost:" + port + "/ws",
+                    new WebSocketHttpHeaders(),
+                    connectHeaders,
+                    new StompSessionHandlerAdapter() {}
+            ).get(5, TimeUnit.SECONDS);
+            org.junit.jupiter.api.Assertions.fail("Refresh token must not authenticate a STOMP connection");
+        } catch (Exception e) {
+            assertThat(e).isNotNull();
+        }
+    }
+
+    @Test
     void connectWithNoToken_rejected() {
         StompHeaders connectHeaders = new StompHeaders();
 

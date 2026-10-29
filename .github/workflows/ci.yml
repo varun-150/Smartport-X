@@ -71,9 +71,8 @@ jobs:
         run: npm run build
 
   security-scan:
-    name: Secrets & dependency scan (activated in M12)
+    name: Secret scan (Gitleaks)
     runs-on: ubuntu-latest
-    if: false
     steps:
       - uses: actions/checkout@v4
       - name: gitleaks

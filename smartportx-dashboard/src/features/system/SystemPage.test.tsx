@@ -10,11 +10,13 @@ const {
   allowedPrefixesMock,
   classifyPathMock,
   runTestMock,
+  authUserMock,
 } = vi.hoisted(() => ({
   probeAllMock: vi.fn(),
   allowedPrefixesMock: vi.fn(() => ['/v1/containers', '/v1/vessels']),
   classifyPathMock: vi.fn((): { ok: true; path: string } | { ok: false; error: string } => ({ ok: true, path: '/v1/containers?page=1&size=1' })),
   runTestMock: vi.fn(),
+  authUserMock: vi.fn(() => null as UserResponse | null),
 }))
 
 vi.mock('../../api/systemApi', () => ({
@@ -30,7 +32,10 @@ vi.mock('../../api/systemApi', () => ({
 }))
 
 vi.mock('../../lib/auth', () => ({
-  useAuth: () => ({ user: adminUser(), isAuthenticated: true, login: vi.fn(), logout: vi.fn(), hasRole: () => true }),
+  useAuth: () => {
+    const user = authUserMock()
+    return { user, isAuthenticated: user !== null, login: vi.fn(), logout: vi.fn(), hasRole: () => user !== null }
+  },
 }))
 
 vi.mock('../../lib/realtime', () => ({
@@ -74,6 +79,7 @@ function seedToken(props: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  authUserMock.mockReset().mockReturnValue(adminUser())
   probeAllMock.mockReset().mockResolvedValue(feast())
   runTestMock.mockReset().mockResolvedValue({ ok: true, httpStatus: 200, latencyMs: 3, note: 'HTTP 200 OK', body: '{"items":[]}' })
   allowedPrefixesMock.mockReturnValue(['/v1/containers', '/v1/vessels'])
@@ -180,5 +186,10 @@ describe('SystemPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
   })
 
-
+  it('shows the no-signed-in-user empty state when session user is absent', async () => {
+    authUserMock.mockReturnValue(null)
+    render(<SystemPage />)
+    await screen.findByText('smartportx-identity')
+    expect(screen.getByText('No signed-in user')).toBeInTheDocument()
+  })
 })

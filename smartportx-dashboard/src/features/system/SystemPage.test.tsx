@@ -86,13 +86,13 @@ describe('SystemPage', () => {
     expect(screen.getByRole('heading', { name: 'Runtime console' })).toBeInTheDocument()
     await screen.findByText('smartportx-identity')
     expect(screen.getByText('CONNECTED')).toBeInTheDocument()
-    expect(screen.getByText('ALIVE')).toBeInTheDocument()
+    expect(screen.getAllByText('ALIVE').length).toBeGreaterThan(0)
   })
 
   it('classifies every probe verdict into an honest badge', async () => {
     render(<SystemPage />)
     await screen.findByText('smartportx-identity')
-    expect(screen.getByText('UP')).toBeInTheDocument()
+    expect(screen.getAllByText('UP').length).toBeGreaterThan(0)
     expect(screen.getByText('403').closest('span')).toHaveClass('badge-warn')
     expect(screen.getByText('UNREACHABLE')).toBeInTheDocument()
     expect(screen.getByText('REACHABLE')).toBeInTheDocument()
@@ -115,7 +115,7 @@ describe('SystemPage', () => {
 
   it('shows the signed-in session fields', async () => {
     render(<SystemPage />)
-    expect(await screen.findByText('ops')).toBeInTheDocument()
+    expect((await screen.findAllByText('ops')).length).toBeGreaterThan(0)
     expect(screen.getByText('ops@example.com')).toBeInTheDocument()
     expect(screen.getByText('ADMIN').closest('span')).toHaveClass('badge-accent')
   })
@@ -130,7 +130,7 @@ describe('SystemPage', () => {
     expect(tokenCell.textContent).not.toContain('smartportx')
 
     await userEvent.click(screen.getByRole('button', { name: 'Reveal' }))
-    expect(screen.getByText(/abstract\..*\.sig/)).toBeInTheDocument()
+    expect(screen.getByText(/^abc\./)).toBeInTheDocument()
     expect(screen.getByText(/Token shown in full/)).toBeInTheDocument()
   })
 

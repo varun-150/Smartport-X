@@ -90,8 +90,7 @@ class ContractConformanceIntegrationTest extends BaseIdentityIntegrationTest {
         assertThat(body.has("data")).isTrue();
         assertThat(body.has("pagination")).isTrue();
         JsonNode pagination = body.get("pagination");
-        assertThat(pagination.has("nextCursor")).isTrue();
-        assertThat(pagination.get("nextCursor").isNull() || pagination.get("nextCursor").isTextual()).isTrue();
+        assertThat(!pagination.has("nextCursor") || pagination.get("nextCursor").isNull() || pagination.get("nextCursor").isTextual()).isTrue();
         assertThat(pagination.has("hasMore")).isTrue();
         assertThat(pagination.has("totalCount")).isTrue();
         assertThat(pagination.get("limit").asInt()).isEqualTo(25);

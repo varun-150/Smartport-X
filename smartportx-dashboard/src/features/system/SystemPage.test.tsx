@@ -157,7 +157,8 @@ describe('SystemPage', () => {
   })
 
   it('surfaces inline gating errors without calling the fetcher', async () => {
-    classifyPathMock.mockReturnValue({ ok: false, error: 'Your role cannot call /v1/integration/customs/1 — allowed prefixes: /v1/containers.' })
+    classifyPathMock.mockReset()
+    classifyPathMock.mockImplementation(() => ({ ok: false, error: 'Your role cannot call /v1/integration/customs/1 — allowed prefixes: /v1/containers.' }))
     render(<SystemPage />)
     await screen.findByText('smartportx-identity')
 

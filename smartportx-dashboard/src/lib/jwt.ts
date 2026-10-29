@@ -49,7 +49,9 @@ export function decodeJwtPayload(token: string | null | undefined): DecodedJwtCl
   const parts = token.split('.')
   if (parts.length !== 3) return null
   try {
-    const raw = JSON.parse(base64UrlDecode(parts[1])) as Record<string, unknown>
+    const parsed: unknown = JSON.parse(base64UrlDecode(parts[1]))
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const raw = parsed as Record<string, unknown>
     return {
       sub: toString(raw.sub),
       username: toString(raw.username),

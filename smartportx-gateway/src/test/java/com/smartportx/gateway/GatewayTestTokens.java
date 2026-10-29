@@ -57,18 +57,49 @@ public final class GatewayTestTokens {
     }
 
     public static String token(Set<String> roles, String username, String subject) {
+        Instant now = Instant.now();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .subject(subject)
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(now.plus(Duration.ofMinutes(15))))
+                .claim("roles", roles.stream().toList())
+                .claim("permissions", List.of())
+                .claim("username", username)
+                .claim("email", username + "@smartportx.test")
+                .build();
+        return sign(claims);
+    }
+
+    /** A valid signed JWT with no roles claim, used to verify fail-closed authorization. */
+    public static String roleless() {
+        Instant now = Instant.now();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .subject(FIXED_SUBJECT)
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(now.plus(Duration.ofMinutes(15))))
+                .claim("username", "roleless-user")
+                .build();
+        return sign(claims);
+    }
+
+    /** A valid, unexpired refresh token must not be accepted as an API access token. */
+    public static String refreshToken() {
+        Instant now = Instant.now();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .subject(FIXED_SUBJECT)
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(now.plus(Duration.ofDays(7))))
+                .claim("type", "refresh")
+                .claim("username", "refresh-user")
+                .build();
+        return sign(claims);
+    }
+
+    private static String sign(JWTClaimsSet claims) {
         try {
-            Instant now = Instant.now();
-            JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                    .issuer(ISSUER)
-                    .subject(subject)
-                    .issueTime(Date.from(now))
-                    .expirationTime(Date.from(now.plus(Duration.ofMinutes(15))))
-                    .claim("roles", roles.stream().toList())
-                    .claim("permissions", List.of())
-                    .claim("username", username)
-                    .claim("email", username + "@smartportx.test")
-                    .build();
             JWSHeader header = new JWSHeader(JWSAlgorithm.RS256);
             JWSSigner signer = new RSASSASigner(RSA_KEY.toPrivateKey());
             SignedJWT signed = new SignedJWT(header, claims);

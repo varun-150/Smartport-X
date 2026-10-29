@@ -52,7 +52,7 @@ public class JwtEdgeFilter implements GlobalFilter, Ordered {
         HttpMethod method = exchange.getRequest().getMethod();
 
         if (HttpMethod.OPTIONS.equals(method)
-                || path.startsWith("/ws/")
+                || isWebSocketPath(path)
                 || isPublicRoute(path)
                 || isActuatorLiveness(path)) {
             return chain.filter(exchange);
@@ -104,6 +104,10 @@ public class JwtEdgeFilter implements GlobalFilter, Ordered {
                 })
                 .build();
         return chain.filter(exchange.mutate().request(mutated).build());
+    }
+
+    static boolean isWebSocketPath(String path) {
+        return "/ws".equals(path) || path.startsWith("/ws/");
     }
 
     private boolean isPublicRoute(String path) {

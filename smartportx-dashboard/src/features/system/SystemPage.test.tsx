@@ -117,7 +117,7 @@ describe('SystemPage', () => {
     render(<SystemPage />)
     expect((await screen.findAllByText('ops')).length).toBeGreaterThan(0)
     expect(screen.getByText('ops@example.com')).toBeInTheDocument()
-    expect(screen.getByText('ADMIN').closest('span')).toHaveClass('badge-accent')
+    expect(screen.getAllByText('ADMIN').some((element) => element.closest('span')?.classList.contains('badge-accent'))).toBe(true)
   })
 
   it('masks the token by default and reveals on toggle', async () => {

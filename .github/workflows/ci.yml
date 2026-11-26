@@ -79,6 +79,33 @@ jobs:
         run: docker compose config --quiet
       - name: Build all Compose images
         run: docker compose --parallel 2 build
+      - name: Start stack and verify service health
+        run: |
+          docker compose up -d
+          healthy=0
+          for attempt in {1..60}; do
+            if curl -fsS http://localhost:8081/actuator/health >/dev/null \
+              && curl -fsS http://localhost:8082/actuator/health >/dev/null \
+              && curl -fsS http://localhost:8083/actuator/health >/dev/null \
+              && curl -fsS http://localhost:8084/actuator/health >/dev/null \
+              && curl -fsS http://localhost:8085/actuator/health >/dev/null \
+              && curl -fsS http://localhost:8086/actuator/health >/dev/null \
+              && curl -fsS http://localhost:8087/actuator/health >/dev/null \
+              && curl -fsS http://localhost:8080/actuator/health >/dev/null \
+              && curl -fsS http://localhost:3000 >/dev/null; then
+              healthy=1
+              break
+            fi
+            sleep 10
+          done
+          test "$healthy" -eq 1
+      - name: Verify RabbitMQ application user and notification queue
+        run: |
+          docker compose exec -T rabbitmq rabbitmqctl list_users | grep -q 'smartportx_app'
+          docker compose exec -T rabbitmq rabbitmqctl list_queues name | grep -q 'notification.domain-events'
+      - name: Stop test stack
+        if: always()
+        run: docker compose down -v
 
   security-scan:
     name: Secret scan (Gitleaks)

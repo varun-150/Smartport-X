@@ -36,7 +36,8 @@ public final class RabbitEventTransport implements EventTransport {
             });
             published.incrementAndGet();
         } catch (Exception ex) {
-            LOG.error("rabbit publish failed for {} ({}); event dropped", event.eventType(), ex.getMessage());
+            LOG.error("rabbit publish failed for {} ({}); aborting transaction", event.eventType(), ex.getMessage());
+            throw new IllegalStateException("Failed to publish domain event " + event.eventType(), ex);
         }
     }
 

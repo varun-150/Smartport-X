@@ -8,12 +8,14 @@
 
 | Check | Result | Evidence |
 |---|---|---|
-| Docker Compose configuration | PASS | GitHub Actions run [45843579429](https://github.com/varun-150/Smartport-X/actions/runs/45843579429) |
+| Docker Compose configuration | PASS | [GitHub Actions run 45848520444](https://github.com/varun-150/Smartport-X/actions/runs/45848520444) |
 | All Compose images build | PASS | Same run |
-| Application service health endpoints + dashboard | PASS | Same run |
+| All application health endpoints + dashboard | PASS | Same run |
 | RabbitMQ application user provisioned | PASS | Same run |
-| Notification domain-event queue exists | PASS | Same run |
-| Full cross-service event delivery and business journeys | NOT VERIFIED | Separate E2E scenarios still required |
+| Notification primary queue + DLQ exist | PASS | Same run |
+| Domain-events exchange → Notification queue binding | PASS | Same run |
+| Malformed domain event is rejected and reaches Notification DLQ | PASS | Same run |
+| Full cross-service business journeys | NOT VERIFIED | EJ-01–EJ-05 below remain NOT RUN |
 
 This proves the stack starts and its configured health endpoints respond in CI. It does not prove that a business event emitted by one service is consumed and acted on by another.
 

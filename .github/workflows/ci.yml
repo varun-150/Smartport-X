@@ -104,6 +104,19 @@ jobs:
           docker compose exec -T rabbitmq rabbitmqctl list_users | grep -q 'smartportx_app'
           docker compose exec -T rabbitmq rabbitmqctl list_queues name | grep -q 'notification.domain-events'
           docker compose exec -T rabbitmq rabbitmqctl list_queues name | grep -q 'notification.domain-events.dlq'
+      - name: Verify rejected event reaches Notification DLQ
+        run: |
+          docker compose exec -T rabbitmq rabbitmqadmin -u smartportx_admin -p smartportx_admin_local_change_me publish exchange=smartportx.domain-events routing_key=container.ContainerRegistered payload='not-json'
+          dead_lettered=0
+          for attempt in {1..15}; do
+            count=$(docker compose exec -T rabbitmq rabbitmqctl list_queues name messages_ready | awk '$1 == "notification.domain-events.dlq" { print $2 }')
+            if [ "${count:-0}" -ge 1 ]; then
+              dead_lettered=1
+              break
+            fi
+            sleep 2
+          done
+          test "$dead_lettered" -eq 1
       - name: Stop test stack
         if: always()
         run: docker compose down -v

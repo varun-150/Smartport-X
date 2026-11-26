@@ -30,8 +30,6 @@ DOMAIN_EX="smartportx.domain-events"
 APP_USER="${RABBITMQ_APP_USERNAME:-smartportx_app}"
 APP_PASSWORD="${RABBITMQ_APP_PASSWORD:-smartportx_app_local_change_me}"
 
-declare -a COMMANDS=()
-rq="rabbitmqadmin --host=$RABBITMQ_HOST --port=$RABBITMQ_PORT -u $RABBITMQ_USERNAME -p $RABBITMQ_PASSWORD"
 
 declare_app_user() {
   echo "[rabbit-topology] creating least-privilege application user: $APP_USER"
@@ -40,14 +38,14 @@ declare_app_user() {
 }
 
 declare_exchange() {
-  COMMANDS+=("$rq declare exchange name=$1 type=$2 durable=true")
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare exchange name="$1" type="$2" durable=true
 }
 declare_queue() {
   local name="$1" args="$2"
-  COMMANDS+=("$rq declare queue name=$name durable=true arguments=$args")
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare queue name="$name" durable=true arguments="$args"
 }
 declare_binding() {
-  COMMANDS+=("$rq declare binding source=$1 destination_type=queue destination=$2 routing_key=$3")
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare binding source="$1" destination_type=queue destination="$2" routing_key="$3"
 }
 
 # -- Application credentials ---------------------------------------------------
@@ -106,9 +104,4 @@ for spec in "${QUEUE_SPECS[@]}"; do
 done
 
 # -- Execute -------------------------------------------------------------------
-for cmd in "${COMMANDS[@]}"; do
-  echo ">> $cmd"
-  eval "$cmd"
-done
-
 echo "[rabbit-topology] complete (6 exchanges, ${#QUEUE_SPECS[@]} primary queues + retry/dlq each)"

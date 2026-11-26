@@ -103,5 +103,10 @@ for spec in "${QUEUE_SPECS[@]}"; do
   declare_binding "$DOMAIN_EX" "$QNAME.dlq" "$QNAME.dlq"
 done
 
+# Notification consumer queue: reject poison messages into a dedicated DLQ.
+declare_queue "notification.domain-events" "{\\"x-dead-letter-exchange\\":\\"$DOMAIN_EX\\",\\"x-dead-letter-routing-key\\":\\"notification.domain-events.dlq\\"}"
+declare_queue "notification.domain-events.dlq" '{}'
+declare_binding "$DOMAIN_EX" "notification.domain-events.dlq" "notification.domain-events.dlq"
+
 # -- Execute -------------------------------------------------------------------
 echo "[rabbit-topology] complete (6 exchanges, ${#QUEUE_SPECS[@]} primary queues + retry/dlq each)"

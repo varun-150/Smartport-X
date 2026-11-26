@@ -116,7 +116,17 @@ jobs:
             fi
             sleep 2
           done
-          test "$dead_lettered" -eq 1
+          if [ "$dead_lettered" -ne 1 ]; then
+            echo "Notification queue consumers:"
+            docker compose exec -T rabbitmq rabbitmqctl list_consumers
+            echo "RabbitMQ queue arguments and counters:"
+            docker compose exec -T rabbitmq rabbitmqctl list_queues name messages_ready messages_unacknowledged arguments
+            echo "RabbitMQ bindings:"
+            docker compose exec -T rabbitmq rabbitmqctl list_bindings source_name destination_name routing_key
+            echo "Notification service logs:"
+            docker compose logs --no-color --tail=200 notification
+            exit 1
+          fi
       - name: Stop test stack
         if: always()
         run: docker compose down -v

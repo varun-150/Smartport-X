@@ -30,9 +30,9 @@ public class RabbitEventsConfig {
     @Bean
     public Queue notificationDomainEventsQueue(
             @Value("${smartportx.events.queue:notification.domain-events}") String queue,
-            @Value("${smartportx.events.exchange:smartportx.domain-events}") String exchange) {
+            @Value("${smartportx.events.dead-letter-exchange:smartportx.dead-letter}") String deadLetterExchange) {
         return new Queue(queue, true, false, false, Map.of(
-                "x-dead-letter-exchange", exchange,
+                "x-dead-letter-exchange", deadLetterExchange,
                 "x-dead-letter-routing-key", queue + ".dlq"));
     }
 

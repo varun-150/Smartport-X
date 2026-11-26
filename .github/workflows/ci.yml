@@ -103,6 +103,7 @@ jobs:
         run: |
           docker compose exec -T rabbitmq rabbitmqctl list_users | grep -q 'smartportx_app'
           docker compose exec -T rabbitmq rabbitmqctl list_queues name | grep -q 'notification.domain-events'
+          docker compose exec -T rabbitmq rabbitmqctl list_queues name | grep -q 'notification.domain-events.dlq'
       - name: Stop test stack
         if: always()
         run: docker compose down -v

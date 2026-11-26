@@ -33,6 +33,7 @@ describe('topicAllowed', () => {
     expect(topicAllowed('/topic/dashboard/summary', 'READONLY')).toBe(true)
     expect(topicAllowed('/topic/alerts', 'READONLY')).toBe(true)
     expect(topicAllowed('/topic/alerts/warning', 'READONLY')).toBe(true)
+    expect(topicAllowed('/topic/notifications', 'READONLY')).toBe(false)
   })
 
   it('allows administrators and denies unknown destinations for other roles', () => {

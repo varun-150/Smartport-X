@@ -102,7 +102,11 @@ jobs:
             fi
             sleep 10
           done
-          test "$healthy" -eq 1
+          if [ "$healthy" -ne 1 ]; then
+            docker compose ps
+            docker compose logs --no-color --tail=150
+            exit 1
+          fi
       - name: Verify RabbitMQ application user and notification queue
         run: |
           docker compose exec -T rabbitmq rabbitmqctl list_users | grep -q 'smartportx_app'

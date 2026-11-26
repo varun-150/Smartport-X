@@ -9,6 +9,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Map;
+
 /**
  * Declares the domain-event exchange and the notification consumer queue. Mirrors
  * producers (container/yard/gate/vessel/integration) which publish to
@@ -27,8 +29,11 @@ public class RabbitEventsConfig {
 
     @Bean
     public Queue notificationDomainEventsQueue(
-            @Value("${smartportx.events.queue:notification.domain-events}") String queue) {
-        return new Queue(queue, true);
+            @Value("${smartportx.events.queue:notification.domain-events}") String queue,
+            @Value("${smartportx.events.exchange:smartportx.domain-events}") String exchange) {
+        return new Queue(queue, true, false, false, Map.of(
+                "x-dead-letter-exchange", exchange,
+                "x-dead-letter-routing-key", queue + ".dlq"));
     }
 
     @Bean

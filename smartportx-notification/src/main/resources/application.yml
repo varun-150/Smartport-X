@@ -31,6 +31,7 @@ smartportx:
   events:
     consume-from-rabbitmq: ${EVENTS_CONSUME_FROM_RABBITMQ:false}
     exchange: ${EVENTS_EXCHANGE:smartportx.domain-events}
+    dead-letter-exchange: ${EVENTS_DEAD_LETTER_EXCHANGE:smartportx.dead-letter}
     queue: ${EVENTS_QUEUE:notification.domain-events}
     source: smartportx-notification
   notification:

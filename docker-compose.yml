@@ -40,7 +40,7 @@ services:
       - smartportx-network
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:3.13-management
     container_name: smartportx-rabbitmq
     ports:
       - "5672:5672"
@@ -59,7 +59,7 @@ services:
       - smartportx-network
 
   rabbitmq-init:
-    image: rabbitmq:3-management
+    image: rabbitmq:3.13-management
     container_name: smartportx-rabbitmq-init
     entrypoint: ["/bin/bash", "/scripts/rabbit-topology.sh"]
     environment:

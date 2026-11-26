@@ -1,6 +1,6 @@
 # SMARTPORTX — E2E TEST REPORT (Phase 4)
 
-> Status: **NOT YET RUN** — stub created at Phase 4 kickoff (2026-08-27). Will be populated at M12.1
+> Status: **PARTIAL — FULL BUSINESS E2E JOURNEYS NOT VERIFIED** — stub created at Phase 4 kickoff (2026-08-27). Will be populated at M12.1
 > (real run) and M13.1 (final real-world demo). No pass/fail claims until then (brief §42).
 > Approach: TEST-STRATEGY.md §10. Framework: Playwright (TS) + HTTP client against the running stack.
 

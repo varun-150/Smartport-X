@@ -27,6 +27,7 @@ set -euo pipefail
 : "${RABBITMQ_USERNAME:=smartportx_admin}"
 : "${RABBITMQ_PASSWORD:=smartportx_admin_local_change_me}"
 DOMAIN_EX="smartportx.domain-events"
+DLX_EX="smartportx.dead-letter"
 APP_USER="${RABBITMQ_APP_USERNAME:-smartportx_app}"
 APP_PASSWORD="${RABBITMQ_APP_PASSWORD:-smartportx_app_local_change_me}"
 
@@ -59,6 +60,7 @@ done
 for ex in smartportx.system-broadcasts smartportx.cache-invalidation; do
   declare_exchange "$ex" fanout
 done
+declare_exchange "$DLX_EX" direct
 
 # -- Queues: PRIMARY | EXCHANGE | BINDING-KEY ----------------------------------
 # (COMMUNICATION-ARCHITECTURE §3.3 complete topology — 24 primary queues)
@@ -106,7 +108,7 @@ done
 # Notification consumer queue: reject poison messages into a dedicated DLQ.
 declare_queue "notification.domain-events" "{\"x-dead-letter-exchange\":\"$DOMAIN_EX\",\"x-dead-letter-routing-key\":\"notification.domain-events.dlq\"}"
 declare_queue "notification.domain-events.dlq" '{}'
-declare_binding "$DOMAIN_EX" "notification.domain-events.dlq" "notification.domain-events.dlq"
+declare_binding "$DLX_EX" "notification.domain-events.dlq" "notification.domain-events.dlq"
 
 # -- Execute -------------------------------------------------------------------
-echo "[rabbit-topology] complete (6 exchanges, ${#QUEUE_SPECS[@]} primary queues + retry/dlq each)"
+echo "[rabbit-topology] complete (7 exchanges, ${#QUEUE_SPECS[@]} primary queues + retry/dlq each)"

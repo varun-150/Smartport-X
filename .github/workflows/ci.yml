@@ -112,7 +112,7 @@ jobs:
           docker compose exec -T rabbitmq rabbitmqctl list_users | grep -q 'smartportx_app'
           docker compose exec -T rabbitmq rabbitmqctl list_queues name | grep -q 'notification.domain-events'
           docker compose exec -T rabbitmq rabbitmqctl list_queues name | grep -q 'notification.domain-events.dlq'
-          docker compose exec -T rabbitmq rabbitmqctl list_bindings source_name destination_name routing_key | awk '$1 == "smartportx.domain-events" && $2 == "notification.domain-events" && $3 == "#" { found=1 } END { exit !found }
+          docker compose exec -T rabbitmq rabbitmqctl list_bindings source_name destination_name routing_key | awk '$1 == "smartportx.domain-events" && $2 == "notification.domain-events" && $3 == "#" { found=1 } END { exit !found }'
       - name: Verify rejected event reaches Notification DLQ
         run: |
           docker compose exec -T rabbitmq rabbitmqadmin -u smartportx_admin -p smartportx_admin_local_change_me publish exchange=smartportx.domain-events routing_key=container.ContainerRegistered payload='not-json'

@@ -293,6 +293,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
       eureka:
         condition: service_healthy
     healthcheck:

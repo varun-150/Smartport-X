@@ -24,12 +24,20 @@ set -euo pipefail
 
 : "${RABBITMQ_HOST:=localhost}"
 : "${RABBITMQ_PORT:=15672}"
-: "${RABBITMQ_USERNAME:=guest}"
-: "${RABBITMQ_PASSWORD:=guest}"
+: "${RABBITMQ_USERNAME:=smartportx_admin}"
+: "${RABBITMQ_PASSWORD:=smartportx_admin_local_change_me}"
 DOMAIN_EX="smartportx.domain-events"
+APP_USER="${RABBITMQ_APP_USERNAME:-smartportx_app}"
+APP_PASSWORD="${RABBITMQ_APP_PASSWORD:-smartportx_app_local_change_me}"
 
 declare -a COMMANDS=()
 rq="rabbitmqadmin --host=$RABBITMQ_HOST --port=$RABBITMQ_PORT -u $RABBITMQ_USERNAME -p $RABBITMQ_PASSWORD"
+
+declare_app_user() {
+  echo "[rabbit-topology] creating least-privilege application user: $APP_USER"
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare user name="$APP_USER" password="$APP_PASSWORD" tags=
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare permission vhost=/ user="$APP_USER" configure=".*" write=".*" read=".*"
+}
 
 declare_exchange() {
   COMMANDS+=("$rq declare exchange name=$1 type=$2 durable=true")
@@ -41,6 +49,9 @@ declare_queue() {
 declare_binding() {
   COMMANDS+=("$rq declare binding source=$1 destination_type=queue destination=$2 routing_key=$3")
 }
+
+# -- Application credentials ---------------------------------------------------
+declare_app_user
 
 # -- Exchanges -----------------------------------------------------------------
 for ex in smartportx.domain-events smartportx.notifications \

@@ -48,13 +48,33 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_ADMIN_USERNAME:-smartportx_admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_ADMIN_PASSWORD:-smartportx_admin_local_change_me}
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 15s
       timeout: 10s
       retries: 5
+    networks:
+      - smartportx-network
+
+  rabbitmq-init:
+    image: rabbitmq:3-management
+    container_name: smartportx-rabbitmq-init
+    entrypoint: ["/bin/bash", "/scripts/rabbit-topology.sh"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 15672
+      RABBITMQ_USERNAME: ${RABBITMQ_ADMIN_USERNAME:-smartportx_admin}
+      RABBITMQ_PASSWORD: ${RABBITMQ_ADMIN_PASSWORD:-smartportx_admin_local_change_me}
+      RABBITMQ_APP_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      RABBITMQ_APP_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
+    volumes:
+      - ./scripts/rabbit-topology.sh:/scripts/rabbit-topology.sh:ro
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: "no"
     networks:
       - smartportx-network
 
@@ -132,14 +152,20 @@ services:
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
       eureka:
         condition: service_healthy
     healthcheck:
@@ -168,8 +194,12 @@ services:
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
       # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
       IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
@@ -178,6 +208,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
       eureka:
         condition: service_healthy
       container:
@@ -208,8 +240,12 @@ services:
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
       # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
       IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
@@ -218,6 +254,10 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
       eureka:
         condition: service_healthy
       container:
@@ -250,8 +290,12 @@ services:
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
       # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
       IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
@@ -288,8 +332,12 @@ services:
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
       # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
       IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
@@ -298,6 +346,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
       eureka:
         condition: service_healthy
       container:
@@ -328,8 +378,12 @@ services:
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
       # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
       IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
@@ -340,6 +394,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
       eureka:
         condition: service_healthy
     healthcheck:
@@ -361,6 +417,7 @@ services:
       - "8087:8087"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      EVENTS_CONSUME_FROM_RABBITMQ: "true"
       SERVICE_PORT: 8087
       DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_notification
       SERVICE_SCHEMA: smartportx_notification
@@ -368,8 +425,12 @@ services:
       DATABASE_PASSWORD: ${DB_PASSWORD:-smartportx_local}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-smartportx_app}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-smartportx_app_local_change_me}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
       # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
       IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
@@ -379,6 +440,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
       eureka:
         condition: service_healthy
     healthcheck:

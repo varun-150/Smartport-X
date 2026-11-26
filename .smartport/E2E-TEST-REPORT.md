@@ -4,6 +4,19 @@
 > Approach: TEST-STRATEGY.md §10. Framework: Playwright (TS) + HTTP client against the running stack.
 
 --------------------------------------------------------------------------------
+## CI Infrastructure Smoke — 2026-11-26
+
+| Check | Result | Evidence |
+|---|---|---|
+| Docker Compose configuration | PASS | GitHub Actions run [45843579429](https://github.com/varun-150/Smartport-X/actions/runs/45843579429) |
+| All Compose images build | PASS | Same run |
+| Application service health endpoints + dashboard | PASS | Same run |
+| RabbitMQ application user provisioned | PASS | Same run |
+| Notification domain-event queue exists | PASS | Same run |
+| Full cross-service event delivery and business journeys | NOT VERIFIED | Separate E2E scenarios still required |
+
+This proves the stack starts and its configured health endpoints respond in CI. It does not prove that a business event emitted by one service is consumed and acted on by another.
+
 ## 1. JOURNEYS
 | ID | Journey (TEST-STRATEGY §10) | Script | Result | Evidence (screenshot/log) | Notes |
 |----|------------------------------|--------|--------|---------------------------|-------|

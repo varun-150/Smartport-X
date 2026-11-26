@@ -34,7 +34,7 @@ APP_PASSWORD="${RABBITMQ_APP_PASSWORD:-smartportx_app_local_change_me}"
 declare_app_user() {
   echo "[rabbit-topology] creating least-privilege application user: $APP_USER"
   rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare user name="$APP_USER" password="$APP_PASSWORD" tags=
-  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare permission vhost=/ user="$APP_USER" configure=".*" write=".*" read=".*"
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare permission vhost=/ user="$APP_USER" configure="^(smartportx\\..*|notification\\.domain-events)$" write="^smartportx\\..*$" read="^notification\\.domain-events$"
 }
 
 declare_exchange() {

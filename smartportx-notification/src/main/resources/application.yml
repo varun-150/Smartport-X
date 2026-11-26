@@ -17,6 +17,10 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  rabbitmq:
+    listener:
+      simple:
+        default-requeue-rejected: false
   security:
     oauth2:
       resourceserver:

@@ -3,10 +3,11 @@
 # SmartPortX — RabbitMQ topology declaration (M1.3)
 #
 # Declares the full broker topology from COMMUNICATION-ARCHITECTURE §3.2–§3.4:
-#   - 6 exchanges  (4 topic: domain-events/notifications/audit-events/integration-events,
-#                   2 fanout: system-broadcasts/cache-invalidation)
+#   - 7 exchanges  (4 topic: domain-events/notifications/audit-events/integration-events,
+#                   2 fanout: system-broadcasts/cache-invalidation, 1 direct: dead-letter)
 #   - 24 primary queues + per-queue `.retry` (TTL 60 000 ms) + `.dlq`
 #   - primary bindings per §3.3 topology
+#   - Notification poison messages route to an isolated direct DLX (no topic wildcard loop)
 #   - DEV-ONLY additions to make §3.4 DXL routing actually deliver (recorded D-425):
 #       * primary queue also bound by its literal queue-name key so the retry DLX
 #         (routing-key = <queue-name>) returns to the primary
@@ -14,7 +15,7 @@
 #         so messages dead-lettered with that key reach it
 #
 # Idempotent: `rabbitmqadmin declare` is a no-op when the object already exists
-# with identical arguments. Requires rabbitmqadmin (present in rabbitmq:3-management).
+# with identical arguments. Requires rabbitmqadmin (present in rabbitmq:3.13-management).
 #
 # Usage (defaults match docker-compose dev):
 #   ./scripts/rabbit-topology.sh

@@ -1,6 +1,6 @@
-// Notifications module — preference panel plus a live WebSocket feed of
-// notification-service events. No REST read endpoint exists, so recent items
-// come exclusively from the realtime channel.
+// Notifications module — preference panel plus a role-authorized live alert feed.
+// General event topics are role-scoped; the shared /topic/alerts channel carries
+// only warning-or-higher alerts and is explicitly authorized for all signed-in roles.
 
 import { useCallback, useEffect, useState } from 'react'
 import { notificationApi } from '../../api/notificationApi'
@@ -45,12 +45,12 @@ export function NotificationsPage() {
     <div className="page">
       <div className="page-intro">
         <Kicker>Notifications</Kicker>
-        <h1>Delivery preferences & live feed</h1>
+        <h1>Delivery preferences & live alerts</h1>
       </div>
 
       {status !== 'CONNECTED' ? (
         <DegradedBanner
-          text={`Realtime connection ${status.toLowerCase()} — preferences still load, but the live feed stays offline until the broker reconnects.`}
+          text={`Realtime connection ${status.toLowerCase()} — preferences still load, but the live alert feed stays offline until the broker reconnects.`}
         />
       ) : null}
 
@@ -209,7 +209,7 @@ function LiveFeed({ status }: { status: ReturnType<typeof useRealtime>['status']
 
   useEffect(() => {
     if (status !== 'CONNECTED') return
-    const unsubscribe = subscribe('/topic/notifications', (raw) => {
+    const unsubscribe = subscribe('/topic/alerts', (raw) => {
       append(raw as NotificationPayload)
     })
     return unsubscribe
@@ -222,7 +222,7 @@ function LiveFeed({ status }: { status: ReturnType<typeof useRealtime>['status']
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2 className="panel-title">Live feed</h2>
+        <h2 className="panel-title">Live alerts</h2>
         <span className="mono" style={{ fontSize: 12, color: 'var(--color-ink-3)' }}>
           {sorted.length} / {MAX_FEED}
         </span>
@@ -231,10 +231,10 @@ function LiveFeed({ status }: { status: ReturnType<typeof useRealtime>['status']
       {status !== 'CONNECTED' ? (
         <EmptyState
           title="Feed pending."
-          hint="Notifications appear once the realtime connection is established."
+          hint="Alerts appear once the realtime connection is established."
         />
       ) : sorted.length === 0 ? (
-        <EmptyState title="No notifications yet." hint="Events will stream in as yard, gate, and vessel services publish them." />
+        <EmptyState title="No notifications yet." hint="Warning and higher-severity events will stream in from the event pipeline." />
       ) : (
         <ol className="vstack" style={{ margin: 0, paddingLeft: 0, listStyle: 'none' }}>
           {sorted.map((item) => (

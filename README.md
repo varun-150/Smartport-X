@@ -9,7 +9,7 @@ JWT (RS256) security, PostgreSQL schema-per-service, Docker Compose deployment.
 
 | Path | Purpose |
 |------|---------|
-| `pom.xml` | Maven parent (Spring Boot 3.5.x / Java 25 / Spring Cloud 2025.1.x) |
+| `pom.xml` | Maven parent (Spring Boot 3.5.x / Java 25 / Spring Cloud 2025.0.3) |
 | `smartportx-common/` | Shared library: RFC 9457 errors, correlation id, events, observability |
 | `smartportx-eureka/` | Eureka discovery server (8761) |
 | `smartportx-gateway/` | Spring Cloud Gateway edge (8080) |
@@ -40,6 +40,38 @@ cd smartportx-dashboard
 npm install
 npm run lint && npm run build && npm test
 ```
+
+## Docker Compose demo
+
+Copy `.env.example` to `.env`, replace the local demo passwords, then start the stack:
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+docker compose ps
+```
+
+The Compose stack publishes PostgreSQL on host port `5433` (container port `5432`) to avoid
+colliding with a native PostgreSQL installation. RabbitMQ uses a separate administrator account
+for broker bootstrap and a restricted `smartportx_app` account for service traffic. The topology
+initializer runs before event-producing and event-consuming services. Domain-event publishing and
+the Notification consumer are enabled in this Compose profile.
+
+**Existing RabbitMQ volume migration (preserves broker data):** RabbitMQ only applies
+`RABBITMQ_DEFAULT_USER/PASS` when its data directory is first initialized. If you already have the
+older Compose volume, create the new administrator account once inside the running broker using the
+same values configured in `.env`:
+
+```bash
+docker compose exec rabbitmq rabbitmqctl add_user smartportx_admin smartportx_admin_local_change_me
+docker compose exec rabbitmq rabbitmqctl set_user_tags smartportx_admin administrator
+docker compose exec rabbitmq rabbitmqctl set_permissions -p / smartportx_admin ".*" ".*" ".*"
+docker compose up -d rabbitmq-init
+```
+
+Replace the example username/password in those commands if your `.env` uses different values.
+Do not delete the RabbitMQ or PostgreSQL volumes to apply this migration. The example credentials
+are for local development only; production must use externally managed secrets and TLS.
 
 ## JWT signing keys
 

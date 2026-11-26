@@ -1,11 +1,11 @@
 // STOMP realtime layer.
 //
-// Connects STOMP over SockJS through the Vite /ws proxy to the gateway. Exposes a
-// provider + hook that broadcast payloads per topic to subscribed React components and
-// surfaces an honest connection state. No fabricated messages: when connectivity is
-// impossible the state machine reports DEGRADED and callers render clearly-labelled gaps.
+// Subscriptions are created for the exact destinations requested by mounted UI
+// features. Authorization rules mirror Notification's TopicAuthorizationService;
+// dynamic one-segment topics (container IDs, yard zones, gate lanes, etc.) are
+// supported instead of subscribing to mismatched static aliases.
 
-import { Client, type IMessage } from '@stomp/stompjs'
+import { Client, type IMessage, type StompSubscription } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { env } from '../config/env'
@@ -15,53 +15,72 @@ export type RealtimeStatus = 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'DEGR
 
 interface RealtimeContextValue {
   status: RealtimeStatus
-  /** Subscribe to a STOMP destination; returns an unsubscribe function. */
+  /** Subscribe to an authorized STOMP destination; returns an unsubscribe function. */
   subscribe: (destination: string, onMessage: (payload: unknown) => void) => () => void
 }
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null)
 
-/** Role-gated topic map (mirrors gateway route definitions). */
-const TOPIC_ROLES: Record<string, string[]> = {
-  '/topic/dashboard/summary': ['*'],
-  '/topic/yard/status': ['TERMINAL_OP', 'YARD_MANAGER', 'ADMIN'],
-  '/topic/yard/zone': ['TERMINAL_OP', 'YARD_MANAGER', 'ADMIN'],
-  '/topic/gate/status': ['TERMINAL_OP', 'GATE_OPERATOR', 'ADMIN'],
-  '/topic/vessel/arrivals': ['TERMINAL_OP', 'ADMIN'],
-  '/topic/vessel/departures': ['TERMINAL_OP', 'ADMIN'],
-  '/topic/containers/movements': ['*'],
-  '/topic/containers/status': ['*'],
-  '/topic/containers/alerts': ['*'],
-  '/topic/appointments': ['GATE_OPERATOR', 'ADMIN'],
-  '/topic/customs/clearances': ['TERMINAL_OP', 'ADMIN'],
-  '/topic/notifications': ['*'],
-}
+/** Mirrors Notification's server-side TopicAuthorizationService rules. */
+const TOPIC_RULES: Array<{ pattern: string; roles: string[] }> = [
+  { pattern: '/topic/yard-status', roles: ['TERMINAL_OP'] },
+  { pattern: '/topic/yard-zone/*', roles: ['YARD_MANAGER'] },
+  { pattern: '/topic/gate-status', roles: ['GATE_OPERATOR'] },
+  { pattern: '/topic/gate-lane/*', roles: ['GATE_OPERATOR'] },
+  { pattern: '/topic/vessel-status', roles: ['TERMINAL_OP'] },
+  { pattern: '/topic/vessel/*', roles: ['TERMINAL_OP'] },
+  { pattern: '/topic/containers/*', roles: ['*'] },
+  { pattern: '/topic/appointments/*', roles: ['GATE_OPERATOR'] },
+  { pattern: '/topic/customs/*', roles: ['TERMINAL_OP'] },
+  { pattern: '/topic/dashboard/summary', roles: ['*'] },
+  { pattern: '/topic/alerts', roles: ['*'] },
+  { pattern: '/topic/alerts/*', roles: ['*'] },
+]
 
-function topicAllowed(destination: string, role: string): boolean {
-  const base = Object.keys(TOPIC_ROLES).find((k) => {
-    if (k.endsWith('*')) return destination.startsWith(k.slice(0, -1))
-    return destination.startsWith(k)
+export function topicAllowed(destination: string, role: string): boolean {
+  if (!destination || !role) return false
+  if (role === 'ADMIN') return true
+
+  const actual = destination.split('/').filter(Boolean)
+  const rule = TOPIC_RULES.find(({ pattern }) => {
+    const expected = pattern.split('/').filter(Boolean)
+    return expected.length === actual.length
+      && expected.every((segment, index) => segment === '*' || segment === actual[index])
   })
-  if (!base) return false
-  const roles = TOPIC_ROLES[base] ?? []
-  return roles.includes('*') || roles.includes(role)
+  return Boolean(rule && (rule.roles.includes('*') || rule.roles.includes(role)))
 }
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [status, setStatus] = useState<RealtimeStatus>('DISABLED')
   const clientRef = useRef<Client | null>(null)
-  const subsRef = useRef<Map<string, Set<(payload: unknown) => void>>>(new Map())
+  const handlersRef = useRef<Map<string, Set<(payload: unknown) => void>>>(new Map())
+  const socketSubscriptionsRef = useRef<Map<string, StompSubscription>>(new Map())
 
   const broadcast = useCallback((destination: string, payload: unknown) => {
-    subsRef.current.get(destination)?.forEach((handler) => {
+    handlersRef.current.get(destination)?.forEach((handler) => {
       try {
         handler(payload)
       } catch {
-        // component handler must not kill the socket
+        // A component handler must not kill the shared socket.
       }
     })
   }, [])
+
+  const ensureSocketSubscription = useCallback((destination: string) => {
+    if (!user || !topicAllowed(destination, user.role)) return
+    const client = clientRef.current
+    if (!client?.connected || socketSubscriptionsRef.current.has(destination)) return
+
+    const subscription = client.subscribe(destination, (message: IMessage) => {
+      try {
+        broadcast(destination, JSON.parse(message.body))
+      } catch {
+        broadcast(destination, { raw: message.body })
+      }
+    })
+    socketSubscriptionsRef.current.set(destination, subscription)
+  }, [user, broadcast])
 
   useEffect(() => {
     if (!user) {
@@ -69,9 +88,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    // SockJS is a UMD build; the default import is a constructor function.
     const SockJSCls = SockJS as unknown as { new (url: string): unknown }
-
     const client = new Client({
       brokerURL: undefined,
       webSocketFactory: () => new SockJSCls(env.wsEndpoint) as unknown as WebSocket,
@@ -80,20 +97,13 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       heartbeatOutgoing: 10_000,
       onConnect: () => {
         setStatus('CONNECTED')
-        // Subscribe to every role-permitted topic once the socket is up.
-        Object.keys(TOPIC_ROLES).forEach((dest) => {
-          if (!topicAllowed(dest, user.role)) return
-          client.subscribe(dest, (message: IMessage) => {
-            try {
-              broadcast(dest, JSON.parse(message.body))
-            } catch {
-              broadcast(dest, { raw: message.body })
-            }
-          })
-        })
+        handlersRef.current.forEach((_handlers, destination) => ensureSocketSubscription(destination))
       },
       onStompError: () => setStatus('RECONNECTING'),
-      onWebSocketClose: () => setStatus('RECONNECTING'),
+      onWebSocketClose: () => {
+        socketSubscriptionsRef.current.clear()
+        setStatus('RECONNECTING')
+      },
       onWebSocketError: () => setStatus('DEGRADED'),
     })
 
@@ -102,23 +112,34 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     client.activate()
 
     return () => {
-      client.deactivate()
+      socketSubscriptionsRef.current.forEach((subscription) => subscription.unsubscribe())
+      socketSubscriptionsRef.current.clear()
       clientRef.current = null
+      void client.deactivate()
     }
-  }, [user, broadcast])
+  }, [user, ensureSocketSubscription])
 
   const subscribe = useCallback((destination: string, onMessage: (payload: unknown) => void) => {
-    let set = subsRef.current.get(destination)
-    if (!set) {
-      set = new Set()
-      subsRef.current.set(destination, set)
+    if (!user || !topicAllowed(destination, user.role)) return () => undefined
+
+    let handlers = handlersRef.current.get(destination)
+    if (!handlers) {
+      handlers = new Set()
+      handlersRef.current.set(destination, handlers)
     }
-    set.add(onMessage)
+    handlers.add(onMessage)
+    ensureSocketSubscription(destination)
+
     return () => {
-      set.delete(onMessage)
-      if (set.size === 0) subsRef.current.delete(destination)
+      const current = handlersRef.current.get(destination)
+      current?.delete(onMessage)
+      if (current?.size === 0) {
+        handlersRef.current.delete(destination)
+        socketSubscriptionsRef.current.get(destination)?.unsubscribe()
+        socketSubscriptionsRef.current.delete(destination)
+      }
     }
-  }, [])
+  }, [user, ensureSocketSubscription])
 
   const value = useMemo(() => ({ status, subscribe }), [status, subscribe])
 

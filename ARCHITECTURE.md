@@ -1,13 +1,13 @@
 # SMARTPORTX — ARCHITECTURE
 
-## STATUS: DESIGNED
+## STATUS: DESIGN COMPLETE — IMPLEMENTATION IN PROGRESS
 
-Architecture design is complete (Phase 3). Score: 92/100.
+Architecture design is complete (Phase 3); Phase 4 implementation and runtime verification are in progress. Operational evidence is partial. See `.smartport/IMPLEMENTATION-STATUS.md`, `.smartport/E2E-TEST-REPORT.md`, `.smartport/SECURITY-TEST-REPORT.md`, and `.smartport/PERFORMANCE-TEST-REPORT.md` for current verification status.
 Full details in `.smartport/ARCHITECTURE-OVERVIEW.md` and `.smartport/ADR/ADR-001.md`–`ADR-013.md`.
 
 ## Summary
 
-**Architecture Style:** Service-Based Architecture (SBA) — 8 independently deployable services (D-015).
+**Architecture Style:** Service-Based Architecture (SBA) applying SOA principles — 8 independently deployable services (D-015), with synchronous REST for transactional paths and asynchronous RabbitMQ domain events.
 
 **Services:**
 | # | Service | Port | Responsibility |
@@ -42,5 +42,5 @@ D-015 Architecture Style (SBA) · D-016 Tech Stack · D-017 Broker (RabbitMQ) ·
 ## Architecture Artifacts (`.smartport/`)
 ARCHITECTURE-OVERVIEW.md · SERVICE-CATALOG.md · SERVICE-BOUNDARIES.md · API-CONTRACTS.md · DATA-ARCHITECTURE.md · COMMUNICATION-ARCHITECTURE.md · SECURITY-ARCHITECTURE.md · RESILIENCE-ARCHITECTURE.md · OBSERVABILITY-ARCHITECTURE.md · INTEGRATION-ARCHITECTURE.md · DEPLOYMENT-ARCHITECTURE.md · ARCHITECTURE-TRADEOFFS.md · REQUIREMENT-ARCHITECTURE-TRACEABILITY.md · ADR/ · PHASE-3-FINDINGS.md · PHASE-3-DECISIONS.md · PHASE-3-REPORT.md
 
-## Next Phase
-Phase 4 — Implementation Planning (scaffold plan for all 8 services, DB DDL, API stubs, CI/CD pipeline).
+## Current Phase
+Phase 4 — implementation and verification. The architecture remains unchanged unless measured runtime or business-flow tests prove a structural defect. Production readiness is blocked until full business E2E, security, performance, resilience, and operational recovery evidence is complete.

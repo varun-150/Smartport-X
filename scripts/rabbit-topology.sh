@@ -3,10 +3,11 @@
 # SmartPortX — RabbitMQ topology declaration (M1.3)
 #
 # Declares the full broker topology from COMMUNICATION-ARCHITECTURE §3.2–§3.4:
-#   - 6 exchanges  (4 topic: domain-events/notifications/audit-events/integration-events,
-#                   2 fanout: system-broadcasts/cache-invalidation)
+#   - 7 exchanges  (4 topic: domain-events/notifications/audit-events/integration-events,
+#                   2 fanout: system-broadcasts/cache-invalidation, 1 direct: dead-letter)
 #   - 24 primary queues + per-queue `.retry` (TTL 60 000 ms) + `.dlq`
 #   - primary bindings per §3.3 topology
+#   - Notification poison messages route to an isolated direct DLX (no topic wildcard loop)
 #   - DEV-ONLY additions to make §3.4 DXL routing actually deliver (recorded D-425):
 #       * primary queue also bound by its literal queue-name key so the retry DLX
 #         (routing-key = <queue-name>) returns to the primary
@@ -14,7 +15,7 @@
 #         so messages dead-lettered with that key reach it
 #
 # Idempotent: `rabbitmqadmin declare` is a no-op when the object already exists
-# with identical arguments. Requires rabbitmqadmin (present in rabbitmq:3-management).
+# with identical arguments. Requires rabbitmqadmin (present in rabbitmq:3.13-management).
 #
 # Usage (defaults match docker-compose dev):
 #   ./scripts/rabbit-topology.sh
@@ -24,23 +25,33 @@ set -euo pipefail
 
 : "${RABBITMQ_HOST:=localhost}"
 : "${RABBITMQ_PORT:=15672}"
-: "${RABBITMQ_USERNAME:=guest}"
-: "${RABBITMQ_PASSWORD:=guest}"
+: "${RABBITMQ_USERNAME:=smartportx_admin}"
+: "${RABBITMQ_PASSWORD:=smartportx_admin_local_change_me}"
 DOMAIN_EX="smartportx.domain-events"
+DLX_EX="smartportx.dead-letter"
+APP_USER="${RABBITMQ_APP_USERNAME:-smartportx_app}"
+APP_PASSWORD="${RABBITMQ_APP_PASSWORD:-smartportx_app_local_change_me}"
 
-declare -a COMMANDS=()
-rq="rabbitmqadmin --host=$RABBITMQ_HOST --port=$RABBITMQ_PORT -u $RABBITMQ_USERNAME -p $RABBITMQ_PASSWORD"
+
+declare_app_user() {
+  echo "[rabbit-topology] creating least-privilege application user: $APP_USER"
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare user name="$APP_USER" password="$APP_PASSWORD" tags=
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare permission vhost=/ user="$APP_USER" configure="^(smartportx\\.domain-events|smartportx\\.dead-letter|notification\\.domain-events)$" write="^smartportx\\.domain-events$" read="^notification\\.domain-events$"
+}
 
 declare_exchange() {
-  COMMANDS+=("$rq declare exchange name=$1 type=$2 durable=true")
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare exchange name="$1" type="$2" durable=true
 }
 declare_queue() {
   local name="$1" args="$2"
-  COMMANDS+=("$rq declare queue name=$name durable=true arguments=$args")
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare queue name="$name" durable=true arguments="$args"
 }
 declare_binding() {
-  COMMANDS+=("$rq declare binding source=$1 destination_type=queue destination=$2 routing_key=$3")
+  rabbitmqadmin --host="$RABBITMQ_HOST" --port="$RABBITMQ_PORT" -u "$RABBITMQ_USERNAME" -p "$RABBITMQ_PASSWORD" declare binding source="$1" destination_type=queue destination="$2" routing_key="$3"
 }
+
+# -- Application credentials ---------------------------------------------------
+declare_app_user
 
 # -- Exchanges -----------------------------------------------------------------
 for ex in smartportx.domain-events smartportx.notifications \
@@ -50,6 +61,7 @@ done
 for ex in smartportx.system-broadcasts smartportx.cache-invalidation; do
   declare_exchange "$ex" fanout
 done
+declare_exchange "$DLX_EX" direct
 
 # -- Queues: PRIMARY | EXCHANGE | BINDING-KEY ----------------------------------
 # (COMMUNICATION-ARCHITECTURE §3.3 complete topology — 24 primary queues)
@@ -94,10 +106,10 @@ for spec in "${QUEUE_SPECS[@]}"; do
   declare_binding "$DOMAIN_EX" "$QNAME.dlq" "$QNAME.dlq"
 done
 
-# -- Execute -------------------------------------------------------------------
-for cmd in "${COMMANDS[@]}"; do
-  echo ">> $cmd"
-  eval "$cmd"
-done
+# Notification consumer queue: reject poison messages into a dedicated DLQ.
+declare_queue "notification.domain-events" "{\"x-dead-letter-exchange\":\"$DLX_EX\",\"x-dead-letter-routing-key\":\"notification.domain-events.dlq\"}"
+declare_queue "notification.domain-events.dlq" '{}'
+declare_binding "$DLX_EX" "notification.domain-events.dlq" "notification.domain-events.dlq"
 
-echo "[rabbit-topology] complete (6 exchanges, ${#QUEUE_SPECS[@]} primary queues + retry/dlq each)"
+# -- Execute -------------------------------------------------------------------
+echo "[rabbit-topology] complete (7 exchanges, ${#QUEUE_SPECS[@]} primary queues + retry/dlq each)"

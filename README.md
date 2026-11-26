@@ -9,7 +9,7 @@ JWT (RS256) security, PostgreSQL schema-per-service, Docker Compose deployment.
 
 | Path | Purpose |
 |------|---------|
-| `pom.xml` | Maven parent (Spring Boot 3.5.x / Java 25 / Spring Cloud 2025.1.x) |
+| `pom.xml` | Maven parent (Spring Boot 3.5.x / Java 25 / Spring Cloud 2025.0.3) |
 | `smartportx-common/` | Shared library: RFC 9457 errors, correlation id, events, observability |
 | `smartportx-eureka/` | Eureka discovery server (8761) |
 | `smartportx-gateway/` | Spring Cloud Gateway edge (8080) |

@@ -109,6 +109,7 @@ done
 # Notification consumer queue: reject poison messages into a dedicated DLQ.
 declare_queue "notification.domain-events" "{\"x-dead-letter-exchange\":\"$DLX_EX\",\"x-dead-letter-routing-key\":\"notification.domain-events.dlq\"}"
 declare_queue "notification.domain-events.dlq" '{}'
+declare_binding "$DOMAIN_EX" "notification.domain-events" "#"
 declare_binding "$DLX_EX" "notification.domain-events.dlq" "notification.domain-events.dlq"
 
 # -- Execute -------------------------------------------------------------------

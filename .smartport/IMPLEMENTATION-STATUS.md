@@ -4,9 +4,8 @@
 > NOT STARTED / SCAFFOLDED / IN PROGRESS / IMPLEMENTED / TESTED / VERIFIED / BLOCKED.
 > Evidence IDs refer to EVIDENCE.md. Requirements reference the canonical counts:
 > 46 FR (REQUIREMENTS.md) / 16 NFR groups (NON-FUNCTIONAL-REQUIREMENTS.md) / 36 SR (SECURITY-REQUIREMENTS.md).
-> Last updated: 2026-09-17 (M1–M4 critical validation E-033; F-428 fixed). Rows below now carry their
-> milestone evidence (E-024–E-032); the earlier E-021 SCAFFOLDED rows are superseded.
-> Repo-wide regression: full reactor `mvn test` green — 321 tests, 0 failures (E-033).
+> Last updated: 2026-11-26. Latest GitHub Actions CI run: [45848520444](https://github.com/varun-150/Smartport-X/actions/runs/45848520444).
+> Full reactor Maven regression: 347 tests, 0 failures, 0 errors, 0 skipped. Dashboard lint/tests/build, Gitleaks, Compose validation, all Docker image builds, full stack health, RabbitMQ user/queue/binding, and malformed-event → Notification DLQ checks passed.
 
 --------------------------------------------------------------------------------
 ## 1. SERVICE STATUS
@@ -30,12 +29,12 @@
 | Item | Spec source | Status | Evidence |
 |------|-------------|--------|----------|
 | Local Postgres 17.11 + 7 schemas (init script) | DEPLOYMENT-ARCHITECTURE §3.3, DATA-ARCHITECTURE §2 | VERIFIED (idempotent, schemas live on local PG) | E-022 |
-| RabbitMQ 3 topology (6 exchanges, 24 queues, DLQ/retry) | COMMUNICATION-ARCHITECTURE §3.2–3.4 | IMPLEMENTED (script syntax-checked; live verify PENDING — R-007) | E-022 |
-| docker-compose.yml | DEPLOYMENT-ARCHITECTURE §3.1 (D-424) | VERIFIED (config parse exit 0) | E-022 |
+| RabbitMQ 3.13 topology (7 exchanges, 24 primary queues + retry/DLQ) | COMMUNICATION-ARCHITECTURE §3.2–3.4 | VERIFIED in CI: app user, Notification queue + binding, malformed event → dedicated DLQ; full business event journeys remain pending | CI 45848520444 |
+| docker-compose.yml | DEPLOYMENT-ARCHITECTURE §3.1 (D-424) | VERIFIED in CI: config validation, all images build, app health endpoints + dashboard respond | CI 45848520444 |
 | .env.example (no secrets) | DEPLOYMENT-ARCHITECTURE §5.2 | VERIFIED | E-022 |
 | Prometheus / Grafana / Jaeger | OBSERVABILITY-ARCHITECTURE | SCAFFOLDED (configs written; runs on compose) | E-022 |
 | Flyway migrations (per service V1) | DATA-ARCHITECTURE all schemas | SCAFFOLDED (V1 skeletons; real DDL per service milestone) | E-022 |
-| GitHub Actions CI | DEPLOYMENT-ARCHITECTURE §6 | UPDATED (backend job provisions postgres:17 service + init-databases.sh so integration tests can run; docker/scan stages `if: false` until M12; green GitHub run still PENDING — not executable locally) | E-021/E-025 |
+| GitHub Actions CI | DEPLOYMENT-ARCHITECTURE §6 | VERIFIED: backend 347 tests, dashboard lint/tests/build, Gitleaks, Compose validation, Docker image builds, stack health, RabbitMQ topology + DLQ smoke | CI 45848520444 |
 | Seed data generator (D-010) | INTEGRATION-ARCHITECTURE §7, D-010 | NOT STARTED | — |
 
 ## 3. FUNCTIONAL REQUIREMENTS TRACE (46 FR — slice mapping)

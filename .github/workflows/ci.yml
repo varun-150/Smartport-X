@@ -96,6 +96,7 @@ jobs:
               && curl -fsS http://localhost:8086/actuator/health >/dev/null \
               && curl -fsS http://localhost:8087/actuator/health >/dev/null \
               && curl -fsS http://localhost:8080/actuator/health >/dev/null \
+              && curl -fsS http://localhost:8761/actuator/health >/dev/null \
               && curl -fsS http://localhost:3000 >/dev/null; then
               healthy=1
               break
@@ -107,11 +108,41 @@ jobs:
             docker compose logs --no-color --tail=150
             exit 1
           fi
+      - name: Verify Eureka service registrations
+        run: |
+          registry_ready=0
+          for attempt in {1..30}; do
+            registry=$(curl -fsS -H "Accept: application/json" http://localhost:8761/eureka/apps || true)
+            if [ -n "$registry" ]; then
+              registered=$(printf '%s' "$registry" | jq -r '.applications.application[]?.name')
+              missing=0
+              for app in SMARTPORTX-IDENTITY SMARTPORTX-CONTAINER SMARTPORTX-YARD SMARTPORTX-GATE SMARTPORTX-VESSEL SMARTPORTX-INTEGRATION SMARTPORTX-NOTIFICATION SMARTPORTX-GATEWAY; do
+                if ! printf '%s\n' "$registered" | grep -Fxq "$app"; then
+                  missing=1
+                  break
+                fi
+              done
+              if [ "$missing" -eq 0 ]; then
+                echo "Eureka registered services:"
+                printf '%s\n' "$registered"
+                registry_ready=1
+                break
+              fi
+            fi
+            sleep 2
+          done
+          if [ "$registry_ready" -ne 1 ]; then
+            echo "Eureka registry did not contain all eight application services"
+            printf '%s\n' "$registry" | jq -r '.applications.application[]?.name' || true
+            docker compose logs --no-color --tail=150 eureka
+            exit 1
+          fi
       - name: Verify RabbitMQ application user and notification queue
         run: |
           docker compose exec -T rabbitmq rabbitmqctl list_users | grep -q 'smartportx_app'
           docker compose exec -T rabbitmq rabbitmqctl list_queues name | grep -q 'notification.domain-events'
           docker compose exec -T rabbitmq rabbitmqctl list_queues name | grep -q 'notification.domain-events.dlq'
+          docker compose exec -T rabbitmq rabbitmqctl list_bindings source_name destination_name routing_key | awk '$1 == "smartportx.domain-events" && $2 == "notification.domain-events" && $3 == "#" { found=1 } END { exit !found }'
       - name: Verify rejected event reaches Notification DLQ
         run: |
           docker compose exec -T rabbitmq rabbitmqadmin -u smartportx_admin -p smartportx_admin_local_change_me publish exchange=smartportx.domain-events routing_key=container.ContainerRegistered payload='not-json'

@@ -26,8 +26,9 @@ public class RabbitEventTransport implements EventTransport {
             byte[] body = objectMapper.writeValueAsBytes(event);
             rabbitTemplate.convertAndSend(exchange, event.eventType(), body);
         } catch (Exception e) {
-            log.warn("Failed to publish domain event {} (id={}): {}",
+            log.error("Failed to publish domain event {} (id={}); aborting transaction",
                     event.eventType(), event.eventId(), e.getMessage());
+            throw new IllegalStateException("Failed to publish domain event " + event.eventType(), e);
         }
     }
 }

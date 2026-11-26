@@ -44,8 +44,8 @@ public class RabbitInboundEventSource {
             LOG.debug("consumed domain event type={} id={}", event.eventType(), event.eventId());
             eventRouter.handleEvent(event);
         } catch (IOException e) {
-            LOG.error("malformed domain event rejected (will not requeue): {}",
-                    new String(message.getBody(), java.nio.charset.StandardCharsets.UTF_8), e);
+            LOG.error("malformed domain event rejected (will not requeue); messageId={}, bodyBytes={}",
+                    message.getMessageProperties().getMessageId(), message.getBody().length, e);
             throw new AmqpRejectAndDontRequeueException(e);
         }
     }

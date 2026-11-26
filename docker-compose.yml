@@ -175,6 +175,7 @@ services:
       - "8082:8082"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      EVENTS_PUBLISH_TO_RABBITMQ: "true"
       SERVICE_PORT: 8082
       DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_yard
       SERVICE_SCHEMA: smartportx_yard
@@ -221,6 +222,7 @@ services:
       - "8083:8083"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      EVENTS_PUBLISH_TO_RABBITMQ: "true"
       SERVICE_PORT: 8083
       DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_gate
       SERVICE_SCHEMA: smartportx_gate
@@ -269,6 +271,7 @@ services:
       - "8084:8084"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      EVENTS_PUBLISH_TO_RABBITMQ: "true"
       SERVICE_PORT: 8084
       DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_container
       SERVICE_SCHEMA: smartportx_container
@@ -311,6 +314,7 @@ services:
       - "8085:8085"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      EVENTS_PUBLISH_TO_RABBITMQ: "true"
       SERVICE_PORT: 8085
       DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_vessel
       SERVICE_SCHEMA: smartportx_vessel
@@ -357,6 +361,7 @@ services:
       - "8086:8086"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      EVENTS_PUBLISH_TO_RABBITMQ: "true"
       SERVICE_PORT: 8086
       DATABASE_URL: jdbc:postgresql://postgres:5432/smartportx?currentSchema=smartportx_integration
       SERVICE_SCHEMA: smartportx_integration

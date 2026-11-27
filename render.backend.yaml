@@ -42,6 +42,7 @@ services:
     runtime: docker
     dockerfilePath: ./deploy/Dockerfile.identity
     dockerContext: .
+    preDeployCommand: /app/init-schema.sh
     envVars:
       - key: SERVER_PORT
         value: "8081"
@@ -49,6 +50,26 @@ services:
         value: http://smartportx-eureka:8761/eureka
       - key: SERVICE_SCHEMA
         value: smartportx_identity
+      - key: PGHOST
+        fromDatabase:
+          name: smartportx-postgres
+          property: host
+      - key: PGPORT
+        fromDatabase:
+          name: smartportx-postgres
+          property: port
+      - key: PGDATABASE
+        fromDatabase:
+          name: smartportx-postgres
+          property: database
+      - key: PGUSER
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: PGPASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_USERNAME
@@ -67,6 +88,7 @@ services:
     runtime: docker
     dockerfilePath: ./deploy/Dockerfile.container
     dockerContext: .
+    preDeployCommand: /app/init-schema.sh
     envVars:
       - key: SERVER_PORT
         value: "8084"
@@ -74,6 +96,26 @@ services:
         value: http://smartportx-eureka:8761/eureka
       - key: SERVICE_SCHEMA
         value: smartportx_container
+      - key: PGHOST
+        fromDatabase:
+          name: smartportx-postgres
+          property: host
+      - key: PGPORT
+        fromDatabase:
+          name: smartportx-postgres
+          property: port
+      - key: PGDATABASE
+        fromDatabase:
+          name: smartportx-postgres
+          property: database
+      - key: PGUSER
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: PGPASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_USERNAME
@@ -108,6 +150,7 @@ services:
     runtime: docker
     dockerfilePath: ./deploy/Dockerfile.yard
     dockerContext: .
+    preDeployCommand: /app/init-schema.sh
     envVars:
       - key: SERVER_PORT
         value: "8082"
@@ -115,6 +158,26 @@ services:
         value: http://smartportx-eureka:8761/eureka
       - key: SERVICE_SCHEMA
         value: smartportx_yard
+      - key: PGHOST
+        fromDatabase:
+          name: smartportx-postgres
+          property: host
+      - key: PGPORT
+        fromDatabase:
+          name: smartportx-postgres
+          property: port
+      - key: PGDATABASE
+        fromDatabase:
+          name: smartportx-postgres
+          property: database
+      - key: PGUSER
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: PGPASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_USERNAME
@@ -149,6 +212,7 @@ services:
     runtime: docker
     dockerfilePath: ./deploy/Dockerfile.gate
     dockerContext: .
+    preDeployCommand: /app/init-schema.sh
     envVars:
       - key: SERVER_PORT
         value: "8083"
@@ -156,6 +220,26 @@ services:
         value: http://smartportx-eureka:8761/eureka
       - key: SERVICE_SCHEMA
         value: smartportx_gate
+      - key: PGHOST
+        fromDatabase:
+          name: smartportx-postgres
+          property: host
+      - key: PGPORT
+        fromDatabase:
+          name: smartportx-postgres
+          property: port
+      - key: PGDATABASE
+        fromDatabase:
+          name: smartportx-postgres
+          property: database
+      - key: PGUSER
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: PGPASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_USERNAME
@@ -190,6 +274,7 @@ services:
     runtime: docker
     dockerfilePath: ./deploy/Dockerfile.vessel
     dockerContext: .
+    preDeployCommand: /app/init-schema.sh
     envVars:
       - key: SERVER_PORT
         value: "8085"
@@ -197,6 +282,26 @@ services:
         value: http://smartportx-eureka:8761/eureka
       - key: SERVICE_SCHEMA
         value: smartportx_vessel
+      - key: PGHOST
+        fromDatabase:
+          name: smartportx-postgres
+          property: host
+      - key: PGPORT
+        fromDatabase:
+          name: smartportx-postgres
+          property: port
+      - key: PGDATABASE
+        fromDatabase:
+          name: smartportx-postgres
+          property: database
+      - key: PGUSER
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: PGPASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_USERNAME
@@ -231,6 +336,7 @@ services:
     runtime: docker
     dockerfilePath: ./deploy/Dockerfile.integration
     dockerContext: .
+    preDeployCommand: /app/init-schema.sh
     envVars:
       - key: SERVER_PORT
         value: "8086"
@@ -238,6 +344,26 @@ services:
         value: http://smartportx-eureka:8761/eureka
       - key: SERVICE_SCHEMA
         value: smartportx_integration
+      - key: PGHOST
+        fromDatabase:
+          name: smartportx-postgres
+          property: host
+      - key: PGPORT
+        fromDatabase:
+          name: smartportx-postgres
+          property: port
+      - key: PGDATABASE
+        fromDatabase:
+          name: smartportx-postgres
+          property: database
+      - key: PGUSER
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: PGPASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_USERNAME
@@ -276,6 +402,7 @@ services:
     runtime: docker
     dockerfilePath: ./deploy/Dockerfile.notification
     dockerContext: .
+    preDeployCommand: /app/init-schema.sh
     envVars:
       - key: SERVER_PORT
         value: "8087"
@@ -283,6 +410,26 @@ services:
         value: http://smartportx-eureka:8761/eureka
       - key: SERVICE_SCHEMA
         value: smartportx_notification
+      - key: PGHOST
+        fromDatabase:
+          name: smartportx-postgres
+          property: host
+      - key: PGPORT
+        fromDatabase:
+          name: smartportx-postgres
+          property: port
+      - key: PGDATABASE
+        fromDatabase:
+          name: smartportx-postgres
+          property: database
+      - key: PGUSER
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: PGPASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_USERNAME

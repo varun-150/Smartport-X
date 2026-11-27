@@ -1,0 +1,314 @@
+# SmartPort-X backend Blueprint.
+# In Render, create a separate Blueprint and set Blueprint Path to render.backend.yaml.
+# The Gateway is public. Eureka and domain services are private.
+# Set DATABASE_URL per service to:
+# jdbc:postgresql://<internal-db-host>:5432/smartportx?currentSchema=<service-schema>
+# Set RabbitMQ variables to an externally hosted RabbitMQ instance (Render does not
+# provide a managed RabbitMQ database/service). Keep all credentials in Render secrets.
+databases:
+  - name: smartportx-postgres
+    databaseName: smartportx
+    user: smartportx
+    plan: free
+    postgresMajorVersion: "17"
+
+services:
+  - type: pserv
+    name: smartportx-eureka
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.eureka
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SERVER_PORT
+        value: "8761"
+
+  - type: web
+    name: smartportx-gateway
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.gateway
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: SERVER_PORT
+        value: "10000"
+      - key: EUREKA_SERVER
+        value: http://smartportx-eureka:8761/eureka
+      - key: IDENTITY_JWKS_URI
+        value: http://smartportx-identity:8081/api/v1/auth/jwks
+
+  - type: pserv
+    name: smartportx-identity
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.identity
+    dockerContext: .
+    envVars:
+      - key: SERVER_PORT
+        value: "8081"
+      - key: EUREKA_SERVER
+        value: http://smartportx-eureka:8761/eureka
+      - key: SERVICE_SCHEMA
+        value: smartportx_identity
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
+      - key: SEED_DEMO_USERS
+        value: "false"
+
+  - type: pserv
+    name: smartportx-container
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.container
+    dockerContext: .
+    envVars:
+      - key: SERVER_PORT
+        value: "8084"
+      - key: EUREKA_SERVER
+        value: http://smartportx-eureka:8761/eureka
+      - key: SERVICE_SCHEMA
+        value: smartportx_container
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
+      - key: EVENTS_PUBLISH_TO_RABBITMQ
+        value: "true"
+      - key: RABBITMQ_HOST
+        sync: false
+      - key: RABBITMQ_PORT
+        value: "5672"
+      - key: RABBITMQ_USERNAME
+        sync: false
+      - key: RABBITMQ_PASSWORD
+        sync: false
+      - key: SPRING_RABBITMQ_HOST
+        sync: false
+      - key: SPRING_RABBITMQ_PORT
+        value: "5672"
+      - key: SPRING_RABBITMQ_USERNAME
+        sync: false
+      - key: SPRING_RABBITMQ_PASSWORD
+        sync: false
+
+  - type: pserv
+    name: smartportx-yard
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.yard
+    dockerContext: .
+    envVars:
+      - key: SERVER_PORT
+        value: "8082"
+      - key: EUREKA_SERVER
+        value: http://smartportx-eureka:8761/eureka
+      - key: SERVICE_SCHEMA
+        value: smartportx_yard
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
+      - key: EVENTS_PUBLISH_TO_RABBITMQ
+        value: "true"
+      - key: RABBITMQ_HOST
+        sync: false
+      - key: RABBITMQ_PORT
+        value: "5672"
+      - key: RABBITMQ_USERNAME
+        sync: false
+      - key: RABBITMQ_PASSWORD
+        sync: false
+      - key: SPRING_RABBITMQ_HOST
+        sync: false
+      - key: SPRING_RABBITMQ_PORT
+        value: "5672"
+      - key: SPRING_RABBITMQ_USERNAME
+        sync: false
+      - key: SPRING_RABBITMQ_PASSWORD
+        sync: false
+
+  - type: pserv
+    name: smartportx-gate
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.gate
+    dockerContext: .
+    envVars:
+      - key: SERVER_PORT
+        value: "8083"
+      - key: EUREKA_SERVER
+        value: http://smartportx-eureka:8761/eureka
+      - key: SERVICE_SCHEMA
+        value: smartportx_gate
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
+      - key: EVENTS_PUBLISH_TO_RABBITMQ
+        value: "true"
+      - key: RABBITMQ_HOST
+        sync: false
+      - key: RABBITMQ_PORT
+        value: "5672"
+      - key: RABBITMQ_USERNAME
+        sync: false
+      - key: RABBITMQ_PASSWORD
+        sync: false
+      - key: SPRING_RABBITMQ_HOST
+        sync: false
+      - key: SPRING_RABBITMQ_PORT
+        value: "5672"
+      - key: SPRING_RABBITMQ_USERNAME
+        sync: false
+      - key: SPRING_RABBITMQ_PASSWORD
+        sync: false
+
+  - type: pserv
+    name: smartportx-vessel
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.vessel
+    dockerContext: .
+    envVars:
+      - key: SERVER_PORT
+        value: "8085"
+      - key: EUREKA_SERVER
+        value: http://smartportx-eureka:8761/eureka
+      - key: SERVICE_SCHEMA
+        value: smartportx_vessel
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
+      - key: EVENTS_PUBLISH_TO_RABBITMQ
+        value: "true"
+      - key: RABBITMQ_HOST
+        sync: false
+      - key: RABBITMQ_PORT
+        value: "5672"
+      - key: RABBITMQ_USERNAME
+        sync: false
+      - key: RABBITMQ_PASSWORD
+        sync: false
+      - key: SPRING_RABBITMQ_HOST
+        sync: false
+      - key: SPRING_RABBITMQ_PORT
+        value: "5672"
+      - key: SPRING_RABBITMQ_USERNAME
+        sync: false
+      - key: SPRING_RABBITMQ_PASSWORD
+        sync: false
+
+  - type: pserv
+    name: smartportx-integration
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.integration
+    dockerContext: .
+    envVars:
+      - key: SERVER_PORT
+        value: "8086"
+      - key: EUREKA_SERVER
+        value: http://smartportx-eureka:8761/eureka
+      - key: SERVICE_SCHEMA
+        value: smartportx_integration
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
+      - key: EVENTS_PUBLISH_TO_RABBITMQ
+        value: "true"
+      - key: RABBITMQ_HOST
+        sync: false
+      - key: RABBITMQ_PORT
+        value: "5672"
+      - key: RABBITMQ_USERNAME
+        sync: false
+      - key: RABBITMQ_PASSWORD
+        sync: false
+      - key: SPRING_RABBITMQ_HOST
+        sync: false
+      - key: SPRING_RABBITMQ_PORT
+        value: "5672"
+      - key: SPRING_RABBITMQ_USERNAME
+        sync: false
+      - key: SPRING_RABBITMQ_PASSWORD
+        sync: false
+      - key: IOT_MODE
+        value: simulation
+      - key: CUSTOMS_CLEARANCE_RATE
+        value: "0.7"
+
+  - type: pserv
+    name: smartportx-notification
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.notification
+    dockerContext: .
+    envVars:
+      - key: SERVER_PORT
+        value: "8087"
+      - key: EUREKA_SERVER
+        value: http://smartportx-eureka:8761/eureka
+      - key: SERVICE_SCHEMA
+        value: smartportx_notification
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: smartportx-postgres
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: smartportx-postgres
+          property: password
+      - key: EVENTS_CONSUME_FROM_RABBITMQ
+        value: "true"
+      - key: RABBITMQ_HOST
+        sync: false
+      - key: RABBITMQ_PORT
+        value: "5672"
+      - key: RABBITMQ_USERNAME
+        sync: false
+      - key: RABBITMQ_PASSWORD
+        sync: false
+      - key: SPRING_RABBITMQ_HOST
+        sync: false
+      - key: SPRING_RABBITMQ_PORT
+        value: "5672"
+      - key: SPRING_RABBITMQ_USERNAME
+        sync: false
+      - key: SPRING_RABBITMQ_PASSWORD
+        sync: false

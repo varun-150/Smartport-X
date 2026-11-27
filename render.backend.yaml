@@ -18,7 +18,6 @@ services:
     runtime: docker
     dockerfilePath: ./deploy/Dockerfile.eureka
     dockerContext: .
-    healthCheckPath: /actuator/health
     envVars:
       - key: SERVER_PORT
         value: "8761"

@@ -1,10 +1,10 @@
 # SmartPort-X backend Blueprint.
 # In Render, create a separate Blueprint and set Blueprint Path to render.backend.yaml.
 # The Gateway is public. Eureka and domain services are private.
-# Set DATABASE_URL per service to:
-# jdbc:postgresql://<internal-db-host>:5432/smartportx?currentSchema=<service-schema>
-# Set RabbitMQ variables to an externally hosted RabbitMQ instance (Render does not
-# provide a managed RabbitMQ database/service). Keep all credentials in Render secrets.
+# Each service receives Render's Postgres connection string; its image converts it to
+# JDBC and selects its schema. Pre-deploy hooks create the seven service schemas.
+# Set RabbitMQ host, port, username, and password to an externally hosted RabbitMQ
+# instance (Render does not provide managed RabbitMQ). Keep credentials in Render secrets.
 databases:
   - name: smartportx-postgres
     databaseName: smartportx
@@ -135,7 +135,7 @@ services:
       - key: RABBITMQ_HOST
         sync: false
       - key: RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: RABBITMQ_USERNAME
         sync: false
       - key: RABBITMQ_PASSWORD
@@ -143,7 +143,7 @@ services:
       - key: SPRING_RABBITMQ_HOST
         sync: false
       - key: SPRING_RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: SPRING_RABBITMQ_USERNAME
         sync: false
       - key: SPRING_RABBITMQ_PASSWORD
@@ -199,7 +199,7 @@ services:
       - key: RABBITMQ_HOST
         sync: false
       - key: RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: RABBITMQ_USERNAME
         sync: false
       - key: RABBITMQ_PASSWORD
@@ -207,7 +207,7 @@ services:
       - key: SPRING_RABBITMQ_HOST
         sync: false
       - key: SPRING_RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: SPRING_RABBITMQ_USERNAME
         sync: false
       - key: SPRING_RABBITMQ_PASSWORD
@@ -263,7 +263,7 @@ services:
       - key: RABBITMQ_HOST
         sync: false
       - key: RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: RABBITMQ_USERNAME
         sync: false
       - key: RABBITMQ_PASSWORD
@@ -271,7 +271,7 @@ services:
       - key: SPRING_RABBITMQ_HOST
         sync: false
       - key: SPRING_RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: SPRING_RABBITMQ_USERNAME
         sync: false
       - key: SPRING_RABBITMQ_PASSWORD
@@ -327,7 +327,7 @@ services:
       - key: RABBITMQ_HOST
         sync: false
       - key: RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: RABBITMQ_USERNAME
         sync: false
       - key: RABBITMQ_PASSWORD
@@ -335,7 +335,7 @@ services:
       - key: SPRING_RABBITMQ_HOST
         sync: false
       - key: SPRING_RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: SPRING_RABBITMQ_USERNAME
         sync: false
       - key: SPRING_RABBITMQ_PASSWORD
@@ -391,7 +391,7 @@ services:
       - key: RABBITMQ_HOST
         sync: false
       - key: RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: RABBITMQ_USERNAME
         sync: false
       - key: RABBITMQ_PASSWORD
@@ -399,7 +399,7 @@ services:
       - key: SPRING_RABBITMQ_HOST
         sync: false
       - key: SPRING_RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: SPRING_RABBITMQ_USERNAME
         sync: false
       - key: SPRING_RABBITMQ_PASSWORD
@@ -459,7 +459,7 @@ services:
       - key: RABBITMQ_HOST
         sync: false
       - key: RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: RABBITMQ_USERNAME
         sync: false
       - key: RABBITMQ_PASSWORD
@@ -467,7 +467,7 @@ services:
       - key: SPRING_RABBITMQ_HOST
         sync: false
       - key: SPRING_RABBITMQ_PORT
-        value: "5672"
+        sync: false
       - key: SPRING_RABBITMQ_USERNAME
         sync: false
       - key: SPRING_RABBITMQ_PASSWORD

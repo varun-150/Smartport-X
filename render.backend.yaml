@@ -71,7 +71,9 @@ services:
           name: smartportx-postgres
           property: password
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: smartportx-postgres
+          property: connectionString
       - key: DATABASE_USERNAME
         fromDatabase:
           name: smartportx-postgres
@@ -117,7 +119,9 @@ services:
           name: smartportx-postgres
           property: password
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: smartportx-postgres
+          property: connectionString
       - key: DATABASE_USERNAME
         fromDatabase:
           name: smartportx-postgres
@@ -179,7 +183,9 @@ services:
           name: smartportx-postgres
           property: password
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: smartportx-postgres
+          property: connectionString
       - key: DATABASE_USERNAME
         fromDatabase:
           name: smartportx-postgres
@@ -241,7 +247,9 @@ services:
           name: smartportx-postgres
           property: password
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: smartportx-postgres
+          property: connectionString
       - key: DATABASE_USERNAME
         fromDatabase:
           name: smartportx-postgres
@@ -303,7 +311,9 @@ services:
           name: smartportx-postgres
           property: password
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: smartportx-postgres
+          property: connectionString
       - key: DATABASE_USERNAME
         fromDatabase:
           name: smartportx-postgres
@@ -365,7 +375,9 @@ services:
           name: smartportx-postgres
           property: password
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: smartportx-postgres
+          property: connectionString
       - key: DATABASE_USERNAME
         fromDatabase:
           name: smartportx-postgres
@@ -431,7 +443,9 @@ services:
           name: smartportx-postgres
           property: password
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: smartportx-postgres
+          property: connectionString
       - key: DATABASE_USERNAME
         fromDatabase:
           name: smartportx-postgres

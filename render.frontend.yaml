@@ -1,19 +1,13 @@
 # SmartPort-X frontend Blueprint.
 # In Render, create a Blueprint and set Blueprint Path to render.frontend.yaml.
+# Nginx serves the SPA and proxies /api + /ws to the private-network Gateway.
 services:
   - type: web
     name: smartportx-frontend
-    runtime: static
+    runtime: docker
     rootDir: smartportx-dashboard
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /
+    plan: free
     autoDeployTrigger: checksPass
-    envVars:
-      # Set this to the public Render Gateway URL, ending in /api.
-      # Example: https://smartportx-gateway.onrender.com/api
-      - key: VITE_API_BASE_URL
-        sync: false
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html

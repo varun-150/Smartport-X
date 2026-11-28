@@ -1,0 +1,42 @@
+# =============================================================================
+# SmartPortX — .dockerignore (repo-root build context)
+# Keep the build context lean and free of host artifacts/secrets.
+# =============================================================================
+
+# VCS
+.git
+.gitignore
+
+# HarborFlow companion project (separate workspace docs) — not part of the image
+.smartport
+.harborflow
+docs
+
+# Local environment / secrets
+.env
+.env.local
+.env.*.local
+!*.env.example
+
+# Maven outputs (rebuilt inside the image by the builder stage)
+**/target
+**/*.jar
+
+# Node / dashboard host artifacts (dashboard has its own Dockerfile context)
+smartportx-dashboard/node_modules
+smartportx-dashboard/dist
+**/node_modules
+**/dist
+
+# Logs, IDE, OS
+*.log
+.idea
+.vscode
+*.iml
+.DS_Store
+Thumbs.db
+
+# Phase/analysis scratch (source of truth stays in .smartport/)
+PHASES.md
+RESEARCH.md
+RESEARCH-TEMPLATE.md

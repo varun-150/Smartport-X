@@ -1,0 +1,15 @@
+# Dashboard build context — keep host artifacts and local secrets out of the image.
+node_modules
+dist
+coverage
+.vite
+test-results
+playwright-report
+verify.tmp.mjs
+pw-debug.mjs
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db

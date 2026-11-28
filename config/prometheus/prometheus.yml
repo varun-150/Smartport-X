@@ -1,0 +1,88 @@
+# SmartPortX - Prometheus scrape configuration
+#
+# Security model: /actuator/prometheus is exposed on every service only to the
+# SMARTPORTX_MONITORING_ALLOWED_NETWORKS allow-list (default: loopback and the
+# Docker bridge subnet). No Prometheus credentials are stored in this file; access
+# is enforced by the services using the socket peer address, so X-Forwarded-For
+# cannot be spoofed to gain monitoring access. Prometheus runs on the private
+# smartportx-network and must not be published on an untrusted interface.
+#
+# Targets use Compose DNS names inside smartportx-network. For a native (non-Docker)
+# run use config/prometheus/prometheus.native.yml instead.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    environment: docker
+    platform: smartportx
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: prometheus
+
+  - job_name: smartportx-eureka
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["eureka:8761"]
+        labels:
+          service: smartportx-eureka
+
+  - job_name: smartportx-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["gateway:8080"]
+        labels:
+          service: smartportx-gateway
+
+  - job_name: smartportx-identity
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["identity:8081"]
+        labels:
+          service: smartportx-identity
+
+  - job_name: smartportx-yard
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["yard:8082"]
+        labels:
+          service: smartportx-yard
+
+  - job_name: smartportx-gate
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["gate:8083"]
+        labels:
+          service: smartportx-gate
+
+  - job_name: smartportx-container
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["container:8084"]
+        labels:
+          service: smartportx-container
+
+  - job_name: smartportx-vessel
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["vessel:8085"]
+        labels:
+          service: smartportx-vessel
+
+  - job_name: smartportx-integration
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["integration:8086"]
+        labels:
+          service: smartportx-integration
+
+  - job_name: smartportx-notification
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["notification:8087"]
+        labels:
+          service: smartportx-notification

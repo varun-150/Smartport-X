@@ -1,0 +1,436 @@
+SMARTPORTX - COMPLETE LOCAL EXECUTION AND VERIFICATION REPORT
+================================================================
+
+Report date: 2026-10-30
+Workspace: D:\Smartport-X
+Operating system: Windows 11
+Execution scope: local project only; no remote repositories or cloud services
+
+
+1. EXECUTIVE SUMMARY
+--------------------
+
+The configured Docker Compose stack was built and started locally.
+
+Current observed state:
+  - Docker Desktop Linux engine responds to `docker info`.
+  - `docker compose config --quiet` succeeds.
+  - 15 of 15 configured containers are running.
+  - 12 containers have health checks and all 12 are healthy.
+  - 3 containers have no Compose health check (Prometheus, Grafana, Jaeger);
+    each responded to its HTTP endpoint.
+  - All 8 Spring application services registered with Eureka.
+  - Application login and an authenticated API request succeeded.
+  - PostgreSQL migrations/schemas were checked without displaying user data.
+  - Gateway trace data was observed in Jaeger after correcting OTLP binding.
+  - Prometheus has a remaining scrape configuration/access issue: 1 of 10
+    active targets is up; 9 are down. No security was disabled to mask it.
+
+Host port conflicts were handled without stopping the local PostgreSQL:
+  - A local PostgreSQL process was already listening on port 5432.
+  - The Docker PostgreSQL host port is 5433 for this run.
+  - The project's local Vite server on port 3000 was stopped after approval.
+  - The Docker dashboard now owns host port 3000.
+  - Port 3002 is no longer used by the Docker dashboard.
+  - PostgreSQL remains 5432 inside the Compose network; the dashboard remains
+    3000 inside its container.
+
+No database volume was deleted. No destructive database or Docker volume
+command was run. Existing named volumes and network were reused.
+
+
+2. PROJECT AND CONFIGURATION INSPECTION
+---------------------------------------
+
+The top-level Maven reactor targets Java 25. The root Dockerfile uses
+Maven 3.9.16 with Eclipse Temurin 25 for builds and Temurin 25 JRE for
+application containers. The dashboard Dockerfile uses Node 24 and nginx.
+Docker built all 10 application images (9 Java modules including Eureka,
+plus the dashboard image) and the configured infrastructure images.
+The Maven Docker build invokes `mvn -B -DskipTests package`; this verifies
+packaging, not the Java test suites.
+
+Windows Java inspection:
+  - `java` resolved first to Java 8.0.511.
+  - Another Java 21 executable was also found on PATH.
+  - JAVA_HOME points at an Eclipse Adoptium Java 25.0.3 runtime.
+  - Maven 3.9.16 runs on Java 25.0.3.
+  - The Docker build/runtime also uses Java 25.
+  - No system-wide Java setting was changed.
+
+The local Compose configuration defines these 15 services:
+  1. postgres
+  2. rabbitmq
+  3. eureka
+  4. gateway
+  5. identity
+  6. yard
+  7. gate
+  8. container
+  9. vessel
+ 10. integration
+ 11. notification
+ 12. dashboard
+ 13. prometheus
+ 14. grafana
+ 15. jaeger
+
+Application services use PostgreSQL schemas in a shared `smartportx`
+database. Compose dependencies include health conditions for major service
+dependencies, including PostgreSQL, RabbitMQ, Eureka and dependent services.
+App service health checks query their actuator health endpoints.
+
+Environment files:
+  - `.env.example` exists.
+  - A local `.env` file now sets POSTGRES_PORT=5433 and DASHBOARD_PORT=3000.
+    `.env` is ignored by the repository's `.gitignore`.
+  - No secret values from `.env` were displayed.
+  - The example JWT secret is a placeholder and is not reported as an
+    effective runtime credential.
+
+Messaging:
+  - RabbitMQ is configured with a management endpoint and a persistent named
+    volume.
+  - `scripts/rabbit-topology.sh` contains the project's queue/exchange
+    topology declaration. No separate execution of that script was performed.
+
+Database initialization:
+  - `scripts/init-databases.sh` provisions the shared database, app role and
+    seven service schemas when PostgreSQL initializes a new data directory.
+  - Seven service schemas and seven `flyway_schema_history` tables were
+    observed in the running database.
+  - Database user rows or password hashes were not printed.
+
+Frontend:
+  - The dashboard build argument sets `VITE_API_BASE_URL=/api`.
+  - nginx serves the dashboard and proxies `/api/` and `/ws/` to the gateway.
+  - The local dashboard login page and the same-origin JWKS API proxy were
+    both verified with HTTP 200.
+
+
+3. DOCKER, BUILD, AND STARTUP
+-----------------------------
+
+Docker Desktop was initially stopped. It was started using:
+  `docker desktop start`
+
+After startup:
+  - Docker Engine server version: 29.8.0 (Docker Desktop).
+  - Docker Compose config validation succeeded.
+  - The full application image build succeeded.
+  - The stack was started using `docker compose up -d`; the local `.env`
+    publishes PostgreSQL on 5433 and the dashboard on 3000.
+  - The existing named volumes were reused, not removed.
+
+Docker Compose displayed warnings that network `smartportx-network` and
+volumes `smartportx-postgres-data`, `smartportx-rabbitmq-data`,
+`smartportx-prometheus-data`, and `smartportx-grafana-data` already existed
+with project label `soafinalproject` rather than the current Compose project
+label. They were reused by their explicit names. This is a project-label
+warning, not evidence that the volume contents were reset.
+
+
+4. CURRENT COMPONENT STATUS
+---------------------------
+
+Component       State / URL                         Verification
+--------------- ----------------------------------- --------------------------
+Frontend        http://localhost:3000/login         HTTP 200; container healthy
+Eureka          http://localhost:8761               Health HTTP 200; healthy
+API Gateway     http://localhost:8080               Health HTTP 200; healthy
+Identity        http://localhost:8081               Health HTTP 200; healthy
+Yard            http://localhost:8082               Health HTTP 200; healthy
+Gate            http://localhost:8083               Health HTTP 200; healthy
+Container       http://localhost:8084               Health HTTP 200; healthy
+Vessel          http://localhost:8085               Health HTTP 200; healthy
+Integration     http://localhost:8086               Health HTTP 200; healthy
+Notification    http://localhost:8087               Health HTTP 200; healthy
+PostgreSQL      localhost:5433 (container 5432)     Health check; TCP query OK
+RabbitMQ        http://localhost:15672              Health check; API auth OK
+Prometheus      http://localhost:9090               HTTP health OK; 1/10 up
+Grafana         http://localhost:3001               API HTTP 200; no healthcheck
+Jaeger          http://localhost:16686              HTTP 200; traces observed
+
+Configured container health checks:
+  - Healthy: postgres, rabbitmq, eureka, gateway, identity, yard, gate,
+    container, vessel, integration, notification, dashboard.
+  - Unhealthy: none.
+  - No Docker health check: prometheus, grafana, jaeger. Each was probed
+    successfully over HTTP.
+
+Eureka registrations observed (8):
+  SMARTPORTX-CONTAINER
+  SMARTPORTX-GATE
+  SMARTPORTX-GATEWAY
+  SMARTPORTX-IDENTITY
+  SMARTPORTX-INTEGRATION
+  SMARTPORTX-NOTIFICATION
+  SMARTPORTX-VESSEL
+  SMARTPORTX-YARD
+
+HTTP checks performed:
+  - Dashboard login page: HTTP 200.
+  - After the port change, the Docker dashboard returned HTTP 200 at port
+    3000; port 3002 no longer served the Docker dashboard.
+  - Eureka actuator health: HTTP 200.
+  - Gateway actuator health: HTTP 200.
+  - Identity, yard, gate, container, vessel, integration and notification
+    actuator health: HTTP 200 each.
+  - Dashboard same-origin `/api/v1/auth/jwks` proxy: HTTP 200.
+  - RabbitMQ management API: HTTP 200 with configured Basic credentials.
+    An unauthenticated probe returned HTTP 401 as expected.
+  - Prometheus `/-/healthy`: HTTP 200.
+  - Grafana `/api/health`: HTTP 200.
+  - Jaeger UI: HTTP 200.
+  - Gateway login: successful.
+  - Authenticated `GET /api/v1/vessels`: HTTP 200.
+  - Frontend database-write check: signed in as admin in the browser, created
+    a uniquely named READONLY verification user using the frontend's Create
+    User form, observed it in the users list, and verified the row in
+    `smartportx_identity.users`. The account was then disabled through the
+    frontend. PostgreSQL confirmed its final `enabled=false` state. No
+    password hash or test password was queried or included in this report.
+  - Database password/TCP query: successful; query returned `1`.
+
+
+5. AUTHENTICATION AND DEVELOPMENT CREDENTIALS
+----------------------------------------------
+
+The application login endpoint is:
+  POST http://localhost:8080/api/v1/auth/login
+
+The request uses JSON containing `username` and `password`. The frontend
+login form also submits a username (email is not the field used by the form).
+
+Application admin:
+  Username: admin
+  Email: admin@smartportx.local
+  Password from the local demo seeder: Admin@12345
+  Role: ADMIN
+  Verification: login was tested; response identified username `admin` and
+  role `ADMIN`. The access token was not printed. A protected vessels API
+  request made with that token returned HTTP 200.
+
+The Compose default `SEED_DEMO_USERS=true` was present in the effective
+identity container environment. The database query confirmed that all five
+expected demo usernames are present, without displaying other database
+contents. The seeder only creates a user if its username does not already
+exist, so passwords for existing seeded usernames are not guaranteed to
+match the source defaults unless individually tested.
+
+Other accounts declared by the source seeder (passwords below are the
+seeder's intended defaults, not separately login-tested during this run):
+  Username: ymanager
+  Email: ymanager@smartportx.local
+  Role: YARD_MANAGER
+  Seeder default password: Yard@12345
+
+  Username: gator
+  Email: gator@smartportx.local
+  Role: GATE_OPERATOR
+  Seeder default password: Gate@12345
+
+  Username: toperator
+  Email: toperator@smartportx.local
+  Role: TERMINAL_OP
+  Seeder default password: Term@12345
+
+  Username: viewer
+  Email: viewer@smartportx.local
+  Role: READONLY
+  Seeder default password: View@12345
+
+Configured Compose default credentials were checked against live services:
+
+Service            Username       Password           Evidence
+------------------ -------------- ------------------ ------------------------
+Eureka UI          admin          admin              UI HTTP 200; no-auth 401
+RabbitMQ           guest          guest              Management API HTTP 200
+Grafana            admin          admin              User API HTTP 200
+PostgreSQL         smartportx     smartportx_local   TCP query succeeded
+
+These are development defaults, not production credentials. Relevant
+configuration names include SMARTPORTX_EUREKA_SECURITY_USERNAME and
+SMARTPORTX_EUREKA_SECURITY_PASSWORD, RABBITMQ_USERNAME and
+RABBITMQ_PASSWORD, GRAFANA_PASSWORD, and DB_PASSWORD.
+
+
+6. REMAINING ISSUE: PROMETHEUS SCRAPE TARGETS
+---------------------------------------------
+
+Prometheus is running and its own target is healthy. Current scrape results:
+  - 10 active targets total.
+  - 1 target up: Prometheus itself (`localhost:9090`).
+  - 9 targets down.
+  - Eight service targets return HTTP 401.
+  - The gateway target returns HTTP 404.
+
+Cause observed:
+  - Spring security on application service actuator paths requires
+    authentication except for selected health/info endpoints.
+  - The current Prometheus scrape configuration does not supply credentials.
+  - The gateway's actuator exposure is configured for health, info and
+    metrics; `/actuator/prometheus` is not exposed, so the scrape path returns
+    404.
+
+No authentication or authorization was disabled, and no service was marked
+healthy to hide this issue. To resolve it, the project needs a deliberate
+metrics access design, such as a restricted scrape endpoint or a supported
+authenticated Prometheus scrape configuration, plus exposing the gateway
+Prometheus endpoint. This was not changed during the local startup task.
+
+
+7. CHANGES MADE
+---------------
+
+1. `docker-compose.yml`
+   - PostgreSQL published host port now uses `${POSTGRES_PORT:-5432}:5432`.
+     This allowed the Docker database to use host port 5433 without stopping
+     the existing local PostgreSQL listener on 5432.
+   - Dashboard published host port now uses `${DASHBOARD_PORT:-3000}:3000`.
+     This allowed the Docker dashboard to use host port 3002 without stopping
+     the existing Vite server on 3000.
+   - Gateway OTLP endpoint is set to `http://jaeger:4318/v1/traces`.
+   - Gateway depends on Jaeger being started.
+   - Jaeger OTLP gRPC/HTTP listeners bind to `0.0.0.0` inside the Compose
+     network. Ports 4317/4318 were not published to the host.
+
+2. `.env.example`
+   - Added comments documenting `POSTGRES_PORT` as the published host port.
+   - Added `DASHBOARD_PORT=3000` with documentation.
+   - Existing defaults remain unchanged.
+
+3. `.env` (local and gitignored)
+   - Sets POSTGRES_PORT=5433 so Compose does not conflict with local
+     PostgreSQL.
+   - Sets DASHBOARD_PORT=3000 so Docker serves the dashboard on the requested
+     host port.
+
+4. Database state changed through the frontend
+   - Created user `frontend_db_check_20261030` to verify frontend-to-database
+     persistence. Verified its role/status in PostgreSQL, then disabled it
+     through the frontend. The record remains in the database with
+     `enabled=false`.
+   - The local Vite process (PID 12132, verified as this workspace's Vite
+     command) was stopped after user approval. The Docker dashboard now
+     serves port 3000.
+
+No existing database rows or persistent volume contents were deleted.
+
+
+8. SAFE RESTART AND STOP COMMANDS
+---------------------------------
+
+The local `.env` stores the host-port overrides, so from the project directory
+run:
+
+  Set-Location D:\Smartport-X
+  docker compose up --build -d
+
+To confirm state:
+
+  docker compose ps -a
+
+To stop containers without deleting persistent volumes:
+
+  docker compose stop
+
+Do not use `docker compose down -v` or `docker volume prune` if preserving
+database, RabbitMQ, Grafana or Prometheus data.
+
+
+9. EVIDENCE AND LIMITATIONS
+---------------------------
+
+Evidence collected from local commands and HTTP/API probes:
+  - Docker Engine info and Compose config validation.
+  - Successful image build.
+  - `docker compose ps -a` and Docker health inspection.
+  - HTTP checks for frontend, service health endpoints and dashboards.
+  - Eureka registry query returning eight service names.
+  - Application login and authenticated API request.
+  - Aggregate-only PostgreSQL schema/migration and demo-account checks.
+  - Basic-auth checks against Eureka, RabbitMQ and Grafana.
+  - Prometheus active-target query with per-target error status.
+  - Jaeger service/trace query showing gateway trace data.
+
+Sensitive data handling:
+  - No `.env` secret values were printed.
+  - No password hashes, access tokens, or general database contents were
+    included.
+  - The report includes known local development defaults and the source
+    seeder's demo passwords because they are required to use the local app.
+
+Browser pages were opened for the dashboard login, Eureka, Grafana,
+Prometheus and Jaeger. The frontend create-user flow was used for a
+database-persistence check; the test account is now disabled.
+
+
+10. DATABASE CONTENT AND PGADMIN PROCEDURE
+------------------------------------------
+
+Database `smartportx` already contains data. A single uniquely named
+verification account was added through the frontend and then disabled through
+the frontend to test persistence. No existing records were overwritten or
+deleted. The following are aggregate row counts only; no record values were
+displayed.
+
+Seeded/application data observed:
+  - Identity users: 6 total: the five expected demo usernames plus the
+    disabled frontend persistence verification account.
+  - Identity roles: 5.
+  - Containers: 2.
+  - Container events: 2.
+  - Vessels: 2.
+  - Vessel schedules: 1.
+  - Yard blocks: 1.
+  - Yard bays: 2.
+  - Yard rows: 4.
+  - Yard tiers: 12.
+  - Yard equipment: 1.
+  - Testimonials: 12.
+
+The following operational tables were empty at the time checked:
+  - Container movements and container status history.
+  - Gate appointments, gate transactions, appointment quotas and queue status.
+  - Integration customs status, EDIFACT messages, integration logs and IoT
+    readings.
+  - Vessel discharge plans and discharge containers.
+  - Notification history and notification preferences.
+  - Yard optimization history and yard metrics.
+
+Thus, the database is not empty. Some sample/base data is installed, while
+live activity records in several areas have not yet been created. This does
+not indicate that PostgreSQL or the application failed.
+
+pgAdmin availability:
+  - pgAdmin 4 was found running locally.
+  - pgAdmin is not a service in this project's Docker Compose configuration.
+  - The Docker PostgreSQL host mapping is port 5433 because local PostgreSQL
+    already occupies port 5432.
+
+To register/connect the Docker database in pgAdmin:
+  1. In pgAdmin, right-click Servers and choose Register > Server.
+  2. On General, enter a display name such as `SmartPortX Docker`.
+  3. On Connection, enter:
+       Host name/address: localhost
+       Port:              5433
+       Maintenance DB:    smartportx
+       Username:          smartportx
+       Password:          smartportx_local
+  4. Save the password only if appropriate for this local machine, then Save.
+  5. Expand Servers > SmartPortX Docker > Databases > smartportx > Schemas.
+  6. Expand a service schema (for example `smartportx_container`,
+     `smartportx_vessel`, or `smartportx_yard`) > Tables.
+  7. To inspect rows, right-click a table and choose View/Edit Data > All Rows.
+
+Use port 5433 for the Docker database. Port 5432 belongs to the existing
+local PostgreSQL process and may open a different database instance.
+The Compose development credentials above were checked against this running
+Docker database; do not use them for production.
+
+To confirm the frontend persistence test account in pgAdmin, open
+`smartportx_identity.users` and filter for username
+`frontend_db_check_20261030`. The account is disabled (`enabled=false`).
+
+END OF REPORT

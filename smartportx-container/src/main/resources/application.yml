@@ -1,0 +1,71 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: smartportx-container
+  jackson:
+    default-property-inclusion: non_null
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/smartportx?currentSchema=smartportx_container}
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTITY_JWKS_URI:http://localhost:8081/api/v1/auth/jwks}
+
+smartportx:
+  monitoring:
+    allowed-networks: ${SMARTPORTX_MONITORING_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
+  container:
+    source: smartportx-container
+  events:
+    publish-to-rabbitmq: ${EVENTS_PUBLISH_TO_RABBITMQ:false}
+    exchange: ${EVENTS_EXCHANGE:smartportx.domain-events}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER:http://localhost:8761/eureka}
+  instance:
+    prefer-ip-address: true
+
+management:
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.95,0.99
+      slo:
+        http.server.requests: 100ms,250ms,500ms,1s
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    rabbit:
+      enabled: ${EVENTS_PUBLISH_TO_RABBITMQ:false}
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+    propagation:
+      produce: w3c,b3
+      consume: w3c,b3
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}

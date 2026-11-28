@@ -1,0 +1,591 @@
+# =============================================================================
+# SmartPortX — Docker Compose (Local Development & Demo)   [M1.2]
+# Matches DEPLOYMENT-ARCHITECTURE §3.1 with one intentional deviation:
+#   ADR-004 / DATA-ARCHITECTURE §2 == schema-per-service on a SINGLE database
+#   `smartportx` (7 logical schemas), so app services connect to the shared DB
+#   and name their schema via SERVICE_SCHEMA instead of per-service DATABASE_URL.
+# (Deviation recorded: .smartport/PHASE-4-DECISIONS.md D-424)
+#
+# NOTE (M12): all app services build from the repo-root multi-stage Dockerfile via
+# `context: .` + `target: smartportx-<service>`. The `builder` stage compiles and
+# repackages the FULL reactor inside the image, so no host-built JARs are needed:
+#   docker compose up --build            # builds everything, brings the stack up
+# The dashboard still uses its own node/nginx Dockerfile (context ./smartportx-dashboard).
+# =============================================================================
+
+x-app-hardening: &app-hardening
+  security_opt:
+    - "no-new-privileges:true"
+  cap_drop:
+    - ALL
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "3"
+      tag: "{{.Name}}"
+  deploy:
+    resources:
+      limits:
+        cpus: "1.5"
+        memory: 1G
+
+x-infra-hardening: &infra-hardening
+  security_opt:
+    - "no-new-privileges:true"
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "3"
+      tag: "{{.Name}}"
+  deploy:
+    resources:
+      limits:
+        cpus: "2.0"
+        memory: 2G
+services:
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure Services
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    image: postgres:17.11
+    container_name: smartportx-postgres
+    <<: *infra-hardening
+    ports:
+      # Temporary host port avoids any conflict with a native PostgreSQL instance.
+      - "127.0.0.1:${POSTGRES_PORT:?POSTGRES_PORT must be set in .env}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      # Explicit SCRAM-SHA-256 for TCP/host connections (all app services).
+      # Local socket auth is left at the image default so the entrypoint's
+      # init scripts can still connect during first-boot initialisation.
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      # Dedicated, non-superuser application role created by init-databases.sh.
+      APP_ROLE: ${APP_ROLE:?APP_ROLE must be set in .env}
+      APP_ROLE_PASSWORD: ${APP_ROLE_PASSWORD:?APP_ROLE_PASSWORD must be set in .env}
+    healthcheck:
+      # Use the container's own POSTGRES_* values so renamed DB/user still work.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smartportx-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: smartportx-rabbitmq
+    <<: *infra-hardening
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME must be set in .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - smartportx-network
+
+  eureka:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smartportx-eureka
+    container_name: smartportx-eureka
+    <<: *app-hardening
+    ports:
+      - "127.0.0.1:8761:8761"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8761
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      # Dashboard basic-auth (prefix matches EurekaSecurityProperties smartportx.eureka.security.*).
+      # /eureka/** registration and /actuator/health are permitAll, so clients/healthchecks need no creds.
+      SMARTPORTX_EUREKA_SECURITY_USERNAME: ${SMARTPORTX_EUREKA_SECURITY_USERNAME:?SMARTPORTX_EUREKA_SECURITY_USERNAME must be set in .env}
+      SMARTPORTX_EUREKA_SECURITY_PASSWORD: ${SMARTPORTX_EUREKA_SECURITY_PASSWORD:?SMARTPORTX_EUREKA_SECURITY_PASSWORD must be set in .env}
+      SMARTPORTX_MONITORING_ALLOWED_NETWORKS: ${SMARTPORTX_MONITORING_ALLOWED_NETWORKS:-127.0.0.1/32,::1/128,172.16.0.0/12}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - smartportx-network
+
+  # ---------------------------------------------------------------------------
+  # Application Services
+  # ---------------------------------------------------------------------------
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smartportx-gateway
+    container_name: smartportx-gateway
+    <<: *app-hardening
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8080
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      SMARTPORTX_MONITORING_ALLOWED_NETWORKS: ${SMARTPORTX_MONITORING_ALLOWED_NETWORKS:-127.0.0.1/32,::1/128,172.16.0.0/12}
+      # Gateway validates RS256 JWTs via identity's JWKS; it does NOT hold the signing secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+    depends_on:
+      eureka:
+        condition: service_healthy
+      identity:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - smartportx-network
+
+  identity:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smartportx-identity
+    container_name: smartportx-identity
+    <<: *app-hardening
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8081
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set in .env}?currentSchema=smartportx_identity
+      SERVICE_SCHEMA: smartportx_identity
+      # DemoDataSeeder binds smartportx.security.seed-demo-users. SEED_DEMO_USERS
+      # is kept as the operator-facing switch used in .env / .env.example.
+      SMARTPORTX_SECURITY_SEED_DEMO_USERS: ${SEED_DEMO_USERS:-true}
+      SMARTPORTX_TRUSTED_PROXY_NETWORKS: ${SMARTPORTX_TRUSTED_PROXY_NETWORKS:-172.16.0.0/12}
+      SMARTPORTX_MONITORING_ALLOWED_NETWORKS: ${SMARTPORTX_MONITORING_ALLOWED_NETWORKS:-127.0.0.1/32,::1/128,172.16.0.0/12}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:?DATABASE_USERNAME must be set in .env}
+      DATABASE_PASSWORD: ${APP_ROLE_PASSWORD:?APP_ROLE_PASSWORD must be set in .env}
+      # identity has no spring-boot-starter-amqp; no broker settings are required here.
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  yard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smartportx-yard
+    container_name: smartportx-yard
+    <<: *app-hardening
+    ports:
+      - "127.0.0.1:8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8082
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set in .env}?currentSchema=smartportx_yard
+      SERVICE_SCHEMA: smartportx_yard
+      DATABASE_USERNAME: ${DATABASE_USERNAME:?DATABASE_USERNAME must be set in .env}
+      DATABASE_PASSWORD: ${APP_ROLE_PASSWORD:?APP_ROLE_PASSWORD must be set in .env}
+      # Spring Boot relaxed binding needs SPRING_RABBITMQ_*; RABBITMQ_* was inert.
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME must be set in .env}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}
+      SMARTPORTX_MONITORING_ALLOWED_NETWORKS: ${SMARTPORTX_MONITORING_ALLOWED_NETWORKS:-127.0.0.1/32,::1/128,172.16.0.0/12}
+      EVENTS_PUBLISH_TO_RABBITMQ: "true"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      container:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  gate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smartportx-gate
+    container_name: smartportx-gate
+    <<: *app-hardening
+    ports:
+      - "127.0.0.1:8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8083
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      # Gate's HTTP clients use these URLs; localhost would target itself in Docker.
+      CONTAINER_BASE_URL: http://container:8084
+      YARD_BASE_URL: http://yard:8082
+      INTEGRATION_BASE_URL: http://integration:8086
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set in .env}?currentSchema=smartportx_gate
+      SERVICE_SCHEMA: smartportx_gate
+      DATABASE_USERNAME: ${DATABASE_USERNAME:?DATABASE_USERNAME must be set in .env}
+      DATABASE_PASSWORD: ${APP_ROLE_PASSWORD:?APP_ROLE_PASSWORD must be set in .env}
+      # Spring Boot relaxed binding needs SPRING_RABBITMQ_*; RABBITMQ_* was inert.
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME must be set in .env}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}
+      SMARTPORTX_MONITORING_ALLOWED_NETWORKS: ${SMARTPORTX_MONITORING_ALLOWED_NETWORKS:-127.0.0.1/32,::1/128,172.16.0.0/12}
+      EVENTS_PUBLISH_TO_RABBITMQ: "true"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      container:
+        condition: service_healthy
+      yard:
+        condition: service_healthy
+      integration:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  container:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smartportx-container
+    container_name: smartportx-container
+    <<: *app-hardening
+    ports:
+      - "127.0.0.1:8084:8084"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8084
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set in .env}?currentSchema=smartportx_container
+      SERVICE_SCHEMA: smartportx_container
+      DATABASE_USERNAME: ${DATABASE_USERNAME:?DATABASE_USERNAME must be set in .env}
+      DATABASE_PASSWORD: ${APP_ROLE_PASSWORD:?APP_ROLE_PASSWORD must be set in .env}
+      # Spring Boot relaxed binding needs SPRING_RABBITMQ_*; RABBITMQ_* was inert.
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME must be set in .env}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}
+      SMARTPORTX_MONITORING_ALLOWED_NETWORKS: ${SMARTPORTX_MONITORING_ALLOWED_NETWORKS:-127.0.0.1/32,::1/128,172.16.0.0/12}
+      EVENTS_PUBLISH_TO_RABBITMQ: "true"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  vessel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smartportx-vessel
+    container_name: smartportx-vessel
+    <<: *app-hardening
+    ports:
+      - "127.0.0.1:8085:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8085
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      # Vessel's HTTP clients use Compose DNS names, not localhost.
+      CONTAINER_BASE_URL: http://container:8084
+      YARD_BASE_URL: http://yard:8082
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set in .env}?currentSchema=smartportx_vessel
+      SERVICE_SCHEMA: smartportx_vessel
+      DATABASE_USERNAME: ${DATABASE_USERNAME:?DATABASE_USERNAME must be set in .env}
+      DATABASE_PASSWORD: ${APP_ROLE_PASSWORD:?APP_ROLE_PASSWORD must be set in .env}
+      # Spring Boot relaxed binding needs SPRING_RABBITMQ_*; RABBITMQ_* was inert.
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME must be set in .env}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}
+      SMARTPORTX_MONITORING_ALLOWED_NETWORKS: ${SMARTPORTX_MONITORING_ALLOWED_NETWORKS:-127.0.0.1/32,::1/128,172.16.0.0/12}
+      EVENTS_PUBLISH_TO_RABBITMQ: "true"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      container:
+        condition: service_healthy
+      yard:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  integration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smartportx-integration
+    container_name: smartportx-integration
+    <<: *app-hardening
+    ports:
+      - "127.0.0.1:8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8086
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set in .env}?currentSchema=smartportx_integration
+      SERVICE_SCHEMA: smartportx_integration
+      DATABASE_USERNAME: ${DATABASE_USERNAME:?DATABASE_USERNAME must be set in .env}
+      DATABASE_PASSWORD: ${APP_ROLE_PASSWORD:?APP_ROLE_PASSWORD must be set in .env}
+      # Spring Boot relaxed binding needs SPRING_RABBITMQ_*; RABBITMQ_* was inert.
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME must be set in .env}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}
+      SMARTPORTX_MONITORING_ALLOWED_NETWORKS: ${SMARTPORTX_MONITORING_ALLOWED_NETWORKS:-127.0.0.1/32,::1/128,172.16.0.0/12}
+      EVENTS_PUBLISH_TO_RABBITMQ: "true"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
+      # IotSimulationService reads smartportx.integration.iot.enabled.
+      IOT_SIM_ENABLED: ${IOT_SIM_ENABLED:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  notification:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smartportx-notification
+    container_name: smartportx-notification
+    <<: *app-hardening
+    ports:
+      - "127.0.0.1:8087:8087"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICE_PORT: 8087
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set in .env}?currentSchema=smartportx_notification
+      SERVICE_SCHEMA: smartportx_notification
+      DATABASE_USERNAME: ${DATABASE_USERNAME:?DATABASE_USERNAME must be set in .env}
+      DATABASE_PASSWORD: ${APP_ROLE_PASSWORD:?APP_ROLE_PASSWORD must be set in .env}
+      # Spring Boot relaxed binding needs SPRING_RABBITMQ_*; RABBITMQ_* was inert.
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME must be set in .env}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in .env}
+      SMARTPORTX_MONITORING_ALLOWED_NETWORKS: ${SMARTPORTX_MONITORING_ALLOWED_NETWORKS:-127.0.0.1/32,::1/128,172.16.0.0/12}
+      # Notification consumes domain events; it does not publish them.
+      EVENTS_CONSUME_FROM_RABBITMQ: "true"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      # Resourceserver JWKS (RS256) — service validates JWTs via identity, not secret.
+      IDENTITY_JWKS_URI: http://identity:8081/api/v1/auth/jwks
+      # Dashboard is published on ${DASHBOARD_PORT}; browser STOMP handshakes come from there.
+      SMARTPORTX_WEBSOCKET_ALLOWED_ORIGINS: ${SMARTPORTX_WEBSOCKET_ALLOWED_ORIGINS:?SMARTPORTX_WEBSOCKET_ALLOWED_ORIGINS must be set in .env}
+      # TestimonialDataSeeder binds smartportx.notification.seed-testimonials.
+      SMARTPORTX_NOTIFICATION_SEED_TESTIMONIALS: ${SEED_TESTIMONIALS:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8087/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - smartportx-network
+
+  # ---------------------------------------------------------------------------
+  # Frontend
+  # ---------------------------------------------------------------------------
+
+  dashboard:
+    build:
+      context: ./smartportx-dashboard
+      dockerfile: Dockerfile
+      args:
+        # Same-origin /api: nginx inside the container proxies /api & /ws -> gateway:8080.
+        VITE_API_BASE_URL: /api
+    container_name: smartportx-dashboard
+    <<: *app-hardening
+    ports:
+      - "${DASHBOARD_PORT:?DASHBOARD_PORT must be set in .env}:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - smartportx-network
+
+  # ---------------------------------------------------------------------------
+  # Monitoring & Observability
+  # ---------------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: smartportx-prometheus
+    <<: *infra-hardening
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - smartportx-network
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: smartportx-grafana
+    <<: *infra-hardening
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    depends_on:
+      - prometheus
+    networks:
+      - smartportx-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.59
+    container_name: smartportx-jaeger
+    <<: *infra-hardening
+    command:
+      - --collector.otlp.grpc.host-port=0.0.0.0:4317
+      - --collector.otlp.http.host-port=0.0.0.0:4318
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:6831:6831/udp"
+      - "127.0.0.1:14268:14268"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - smartportx-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  smartportx-network:
+    driver: bridge
+    name: smartportx-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres-data:
+    name: smartportx-postgres-data
+  rabbitmq-data:
+    name: smartportx-rabbitmq-data
+  prometheus-data:
+    name: smartportx-prometheus-data
+  grafana-data:
+    name: smartportx-grafana-data

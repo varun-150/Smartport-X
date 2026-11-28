@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.16</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.smartportx</groupId>
+  <artifactId>smartportx</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>smartportx</name>
+  <description>Intelligent Distributed Port Logistics &amp; Container Yard Orchestration (Phase 4 implementation)</description>
+
+  <properties>
+    <java.version>25</java.version>
+    <spring-cloud.version>2025.0.3</spring-cloud.version>
+    <maven.compiler.parameters>true</maven.compiler.parameters>
+  </properties>
+
+  <modules>
+    <module>smartportx-common</module>
+    <module>smartportx-eureka</module>
+    <module>smartportx-gateway</module>
+    <module>smartportx-identity</module>
+    <module>smartportx-container</module>
+    <module>smartportx-yard</module>
+    <module>smartportx-gate</module>
+    <module>smartportx-vessel</module>
+    <module>smartportx-integration</module>
+    <module>smartportx-notification</module>
+  </modules>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-dependencies</artifactId>
+        <version>${spring-cloud.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.smartportx</groupId>
+        <artifactId>smartportx-common</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+
+  <!--
+    Software Composition Analysis (backend). Kept in an opt-in profile so the normal
+    build/test cycle stays fast. CI invokes: mvn -B -Psca dependency-check:check
+    An NVD API key can be supplied with -DnvdApiKey=... (or the NVD_API_KEY secret).
+  -->
+  <profiles>
+    <profile>
+      <id>sca</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.owasp</groupId>
+            <artifactId>dependency-check-maven</artifactId>
+            <version>13.0.0</version>
+            <configuration>
+              <!--
+                When an NVD API key is available, pass -DnvdApiKeyEnvironmentVariable=NVD_API_KEY
+                with NVD_API_KEY set in the environment. Leaving it unset uses NVD's
+                rate-limited anonymous access; never inline a key in this POM.
+              -->
+              <formats>HTML,JSON</formats>
+              <outputDirectory>${project.build.directory}/dependency-check-report</outputDirectory>
+              <failBuildOnCVSS>7</failBuildOnCVSS>
+              <skipTestScope>true</skipTestScope>
+            </configuration>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>check</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

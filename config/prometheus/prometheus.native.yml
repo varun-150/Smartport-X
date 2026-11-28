@@ -1,0 +1,71 @@
+# Prometheus scrape configuration for a NATIVE (non-Docker) stack launch.
+# Use with: prometheus --config.file=config/prometheus/prometheus.native.yml
+# The services must be started with EVENTS_PUBLISH_TO_RABBITMQ=false and
+# EVENTS_CONSUME_FROM_RABBITMQ=false (see scripts/start-native.*).
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    environment: native
+    platform: smartportx
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels: { service: prometheus }
+
+  - job_name: smartportx-eureka
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["localhost:8761"]
+        labels: { service: smartportx-eureka }
+
+  - job_name: smartportx-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["localhost:8080"]
+        labels: { service: smartportx-gateway }
+
+  - job_name: smartportx-identity
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["localhost:8081"]
+        labels: { service: smartportx-identity }
+
+  - job_name: smartportx-yard
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["localhost:8082"]
+        labels: { service: smartportx-yard }
+
+  - job_name: smartportx-gate
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["localhost:8083"]
+        labels: { service: smartportx-gate }
+
+  - job_name: smartportx-container
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["localhost:8084"]
+        labels: { service: smartportx-container }
+
+  - job_name: smartportx-vessel
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["localhost:8085"]
+        labels: { service: smartportx-vessel }
+
+  - job_name: smartportx-integration
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["localhost:8086"]
+        labels: { service: smartportx-integration }
+
+  - job_name: smartportx-notification
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["localhost:8087"]
+        labels: { service: smartportx-notification }

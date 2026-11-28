@@ -1,0 +1,318 @@
+/* App shell layout — graphite tile rail + topbar over parchment canvas.
+   Apple-style alternating dark/light tiles, edge-to-edge. */
+
+.app-frame {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr;
+  grid-template-areas:
+    'rail topbar'
+    'rail canvas';
+  min-height: 100vh;
+}
+
+/* ---------- Rail (graphite tile) ---------- */
+.rail {
+  grid-area: rail;
+  background: var(--color-shell);
+  color: var(--color-shell-ink);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px 16px 12px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.rail-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px 14px;
+  border-bottom: 1px solid var(--color-shell-rule);
+  margin-bottom: 12px;
+}
+
+.rail-brand .mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--color-accent);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rail-brand .mark::before {
+  content: 'S';
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rail-brand-name {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-size: var(--fs-base);
+  color: var(--color-shell-ink);
+}
+
+.rail-brand-sub {
+  font-size: var(--fs-xs);
+  color: var(--color-shell-ink-2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--color-shell-ink-2);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-shell-ink);
+}
+
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--color-shell-ink);
+  font-weight: 600;
+}
+
+/* ---------- Topbar (graphite tile) ---------- */
+.topbar {
+  grid-area: topbar;
+  background: var(--color-shell);
+  color: var(--color-shell-ink);
+  border-bottom: 1px solid var(--color-shell-rule);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+}
+
+.page-id {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  line-height: 1.15;
+}
+
+.page-kicker {
+  font-size: var(--fs-kicker);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-shell-ink-2);
+}
+
+.page-title {
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-shell-ink);
+}
+
+/* Realtime chip — bright pigments on the dark tile */
+.conn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  color: var(--color-shell-ink-2);
+  padding: 3px 10px;
+  border: 1px solid var(--color-shell-rule);
+  border-radius: 999px;
+}
+
+.conn-chip::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffd60a;
+}
+
+.conn-chip.on::before {
+  background: #32d74b;
+}
+.conn-chip.off::before {
+  background: #ff453a;
+}
+
+/* Sign-out — ghost control lifted for the dark tile */
+.topbar .btn-ghost {
+  color: var(--color-shell-ink-2);
+  border-color: var(--color-shell-rule);
+}
+
+.topbar .btn-ghost:hover:not(:disabled) {
+  color: var(--color-shell-ink);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--color-shell-ink);
+}
+
+.user-chip .role {
+  font-size: var(--fs-xs);
+  color: var(--color-shell-ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+}
+
+/* ---------- Canvas (parchment) ---------- */
+.canvas {
+  grid-area: canvas;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.page {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.page-intro {
+  color: var(--color-ink-2);
+  font-size: var(--fs-sm);
+  max-width: 72ch;
+}
+
+.filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.filterbar .field {
+  min-width: 150px;
+}
+
+/* ---------- KPI cards (white, quiet shadow) ---------- */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.kpi {
+  background: var(--color-surface);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kpi .kpi-label {
+  font-size: var(--fs-xs);
+  color: var(--color-ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.kpi .kpi-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.kpi .kpi-hint {
+  font-size: var(--fs-xs);
+  color: var(--color-ink-3);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 960px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .app-frame {
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--topbar-h) auto 1fr;
+    grid-template-areas:
+      'topbar'
+      'rail'
+      'canvas';
+  }
+  .rail {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    padding: 8px 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--color-shell-rule);
+  }
+  .rail-brand {
+    display: none;
+  }
+  .nav-list {
+    flex-direction: row;
+    gap: 4px;
+  }
+  .nav-item {
+    border-radius: var(--pill);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .nav-item.active {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  /* Topbar must not stretch the single-column track: make it swipeable. */
+  .topbar {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .topbar::-webkit-scrollbar {
+    display: none;
+  }
+}

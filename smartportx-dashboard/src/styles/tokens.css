@@ -1,0 +1,88 @@
+/* Design tokens — Apple-inspired: parchment light canvas, graphite dark shell,
+   single Action Blue accent. Light surfaces + dark shell tile = edge-to-edge
+   alternating light/dark, SF Pro-first system type, softened radii. */
+
+:root {
+  /* canvas — Apple parchment, white cards, pearl wells */
+  --color-canvas: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-surface-2: #fafafc;
+
+  /* ink — Apple graphite scale */
+  --color-ink: #1d1d1f;
+  --color-ink-2: #333333;
+  --color-ink-3: #6e6e73;
+
+  /* rules & hairlines */
+  --color-rule: #e0e0e0;
+  --color-rule-strong: #c9c9cd;
+
+  /* shell (rail, topbar) — graphite tile, deepest layer */
+  --color-shell: #272729;
+  --color-shell-2: #2a2a2c;
+  --color-shell-ink: #ffffff;
+  --color-shell-ink-2: #cccccc;
+  --color-shell-rule: rgba(255, 255, 255, 0.12);
+
+  /* accent — Action Blue, signal only, never colour alone */
+  --color-accent: #0066cc;
+  --color-accent-hover: #0071e3;
+  --color-accent-ink: #0066cc;
+  --color-accent-canvas: rgba(0, 102, 204, 0.1);
+
+  /* status pigments (balanced for legibility on light surfaces) */
+  --color-ok: #1a7f37;
+  --color-ok-tint: #e6f4ea;
+  --color-warn: #7a5500;
+  --color-warn-tint: #fff4d6;
+  --color-danger: #cf222e;
+  --color-danger-tint: #ffebe9;
+  --color-info: #0969da;
+  --color-info-tint: #ddf4ff;
+
+  /* type — Apple system stacks, SF Pro first */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+    system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'Cascadia Mono', 'JetBrains Mono',
+    Consolas, 'Courier New', monospace;
+
+  /* scale */
+  --fs-2xl: 28px;
+  --fs-xl: 20px;
+  --fs-base: 14px;
+  --fs-sm: 13px;
+  --fs-xs: 12px;
+  --fs-kicker: 11px;
+
+  /* geometry — softened cards, pill buttons, generous shell */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --pill: 980px;
+  --rail-w: 240px;
+  --topbar-h: 56px;
+  --ring: 0 0 0 3px rgba(0, 102, 204, 0.35);
+
+  /* elevation — quiet shadows, never heavy chrome */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-pop: 0 8px 20px rgba(0, 0, 0, 0.12), 0 20px 60px rgba(0, 0, 0, 0.16);
+
+  /* motion */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 240ms;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* table hover tint */
+  --hover-tint: rgba(0, 0, 0, 0.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
